@@ -300,7 +300,30 @@ input,textarea,select{font-size:16px!important;-webkit-appearance:none;appearanc
 .conn-dot{width:7px;height:7px;border-radius:50%;background:var(--danger);display:inline-block;margin-right:4px;vertical-align:middle}
 .conn-dot.online{background:var(--success)}
 
-/* ── MESSAGE STATUS TICKS ── */
+/* ── IN-APP NOTIFICATION BANNER ── */
+#notif-banner{
+  position:absolute;top:0;left:0;right:0;z-index:8000;
+  background:var(--bg3);border-bottom:1px solid var(--border);
+  padding:12px 16px;padding-top:max(calc(var(--safe-top) + 10px),18px);
+  display:flex;align-items:center;gap:10px;cursor:pointer;
+  transform:translateY(-110%);transition:transform .32s cubic-bezier(.32,.72,0,1);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+}
+#notif-banner.show{transform:translateY(0);}
+#notif-av{width:36px;height:36px;border-radius:50%;background:linear-gradient(145deg,var(--accent),#005ecb);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;flex-shrink:0;}
+#notif-body{flex:1;min-width:0;}
+#notif-name{font-size:13px;font-weight:700;color:var(--text)}
+#notif-msg{font-size:13px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* unread badge on room list */
+.unread-badge{
+  min-width:20px;height:20px;border-radius:10px;
+  background:var(--accent);color:#fff;
+  font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 5px;flex-shrink:0;
+}
+
 .msg-ticks{font-size:11px;color:var(--text3);margin-left:3px;letter-spacing:-1px}
 .msg-ticks.delivered{color:var(--text3)}
 .msg-ticks.read{color:#34b7f1}
@@ -368,6 +391,15 @@ input,textarea,select{font-size:16px!important;-webkit-appearance:none;appearanc
 </head>
 <body>
 <div id="app-shell">
+
+<!-- in-app notification banner -->
+<div id="notif-banner">
+  <div id="notif-av">?</div>
+  <div id="notif-body">
+    <div id="notif-name"></div>
+    <div id="notif-msg"></div>
+  </div>
+</div>
 
 <!-- privacy shield (blurs on focus loss) -->
 <div id="privacy-shield">
@@ -584,7 +616,7 @@ var SUPA_BUCKET='flash-images';  // Supabase Storage bucket name
 var SESS_KEY='flash_session',CACHE_PFX='flash_msgs_',IMG_CACHE_PFX='flash_img_';
 
 // ── STATE ──
-var db=null,me=null,activeRoom=null,realtimeSub=null,presenceSub=null,authMode='login';
+var db=null,me=null,activeRoom=null,realtimeSub=null,presenceSub=null,globalSub=null,authMode='login';
 var pendingConfirm=null;
 var pendingImgFile=null,pendingImgDataUrl=null,pendingCompressing=false;
 var roomImgDataUrl=null;
@@ -607,7 +639,7 @@ document.addEventListener('DOMContentLoaded',function(){
   var sess=sessLoad();
   if(sess){
     if(Date.now()-sess.loginTime>SESSION_MS){sessClear();showScreen('auth-screen');}
-    else{me=sess;showScreen('rooms-screen');loadRooms();pingConn();}
+    else{me=sess;showScreen('rooms-screen');loadRooms();pingConn();startGlobalListener();requestNotifPermission();}
   } else showScreen('auth-screen');
 });
 
@@ -742,6 +774,14 @@ function wireEvents(){
   on('btn-join-room',openJoinModal);
   on('btn-logout',doLogout);
   on('btn-cancel-reply',cancelReply);
+  // Notification banner tap — open the relevant room
+  byId('notif-banner').addEventListener('click',function(){
+    var roomId=this.dataset.roomId;
+    this.classList.remove('show');
+    if(!roomId)return;
+    // Find room data from cache and open it
+    openRoomById(roomId);
+  });
   on('btn-back',goBack);
   on('btn-room-info',showRoomOptions);
   on('btn-send',sendMsg);
@@ -843,11 +883,14 @@ async function doAuth(){
     }
     byId('username-display').textContent=me.username;
     showScreen('rooms-screen');loadRooms();pingConn();
+    startGlobalListener();
+    requestNotifPermission();
   }catch(e){setMsg(msg,'Error. Try again.',true);console.error(e);}
   finally{btn.disabled=false;btn.textContent=authMode==='login'?'Sign In':'Create Account';}
 }
 function doLogout(){
   if(realtimeSub){realtimeSub.unsubscribe();realtimeSub=null;}
+  stopGlobalListener();
   sessClear();me=null;activeRoom=null;
   byId('auth-username').value='';byId('auth-password').value='';byId('auth-confirm').value='';
   byId('auth-msg').textContent='';byId('lockout-banner').style.display='none';
@@ -1025,6 +1068,132 @@ function compressRoomImg(file){
 }
 
 // ══ ROOMS ══
+// ══ GLOBAL BACKGROUND LISTENER ══
+// Listens to ALL rooms user is in — works even on home screen
+var myRoomIds=[];  // kept in sync so global sub knows which rooms are mine
+var unreadCounts={}; // roomId -> count of unseen messages
+var notifBannerTimer=null;
+
+async function startGlobalListener(){
+  if(globalSub){globalSub.unsubscribe();globalSub=null;}
+  // Fetch all room IDs for this user
+  var mem=await db.from('room_members').select('room_id').eq('user_id',me.id);
+  myRoomIds=(mem.data||[]).map(function(m){return m.room_id;});
+  if(!myRoomIds.length)return;
+
+  // Single channel listening to ALL messages across all rooms
+  globalSub=db.channel('global:'+me.id)
+    .on('postgres_changes',{
+      event:'INSERT',schema:'public',table:'messages'
+    },function(p){
+      var msg=p.new;
+      // Only handle rooms this user is in, and not their own messages
+      if(msg.user_id===me.id)return;
+      if(myRoomIds.indexOf(msg.room_id)===-1)return;
+
+      // If user is already viewing this exact room, let startRealtime handle it
+      if(activeRoom&&activeRoom.id===msg.room_id)return;
+
+      // Update room list preview + unread count
+      unreadCounts[msg.room_id]=(unreadCounts[msg.room_id]||0)+1;
+      cacheAdd(msg.room_id,msg);
+      refreshRoomPreview(msg.room_id,msg);
+
+      // Show in-app banner
+      showNotifBanner(msg);
+
+      // Native browser/OS notification
+      sendNativeNotif(msg);
+    })
+    .subscribe();
+}
+
+function stopGlobalListener(){
+  if(globalSub){globalSub.unsubscribe();globalSub=null;}
+  myRoomIds=[];unreadCounts={};
+}
+
+// Called after joining/leaving a room to keep myRoomIds fresh
+function globalListenerAddRoom(roomId){
+  if(myRoomIds.indexOf(roomId)===-1)myRoomIds.push(roomId);
+}
+
+function refreshRoomPreview(roomId,msg){
+  // Update the room item in the list without full reload
+  var list=byId('rooms-list');
+  var items=list.querySelectorAll('.room-item');
+  // Find item for this room and update preview text + badge
+  // Easiest: just reload rooms list if on home screen
+  var onHome=!byId('rooms-screen').classList.contains('slide-left')&&
+             !byId('rooms-screen').classList.contains('hidden');
+  if(onHome)loadRooms();
+}
+
+// ── IN-APP BANNER ──
+function showNotifBanner(msg){
+  // Look up room display name
+  var roomName=msg.username; // fallback to sender name for DMs
+  var av=msg.username.charAt(0).toUpperCase();
+  byId('notif-av').textContent=av;
+  byId('notif-name').textContent=msg.username;
+  byId('notif-msg').textContent=msg.msg_type==='image'?'📷 sent an image':msg.content;
+
+  var banner=byId('notif-banner');
+  // Store which room this banner is for so tap opens it
+  banner.dataset.roomId=msg.room_id;
+  banner.classList.add('show');
+  clearTimeout(notifBannerTimer);
+  notifBannerTimer=setTimeout(function(){banner.classList.remove('show');},4000);
+}
+
+// ── NATIVE NOTIFICATIONS ──
+function requestNotifPermission(){
+  if(!('Notification' in window))return;
+  if(Notification.permission==='default'){
+    Notification.requestPermission();
+  }
+}
+
+function sendNativeNotif(msg){
+  if(!('Notification' in window))return;
+  if(Notification.permission!=='granted')return;
+  // Don't fire if app is in foreground and visible
+  if(!document.hidden)return; // only when app is backgrounded/minimised
+  try{
+    var n=new Notification(msg.username,{
+      body:msg.msg_type==='image'?'📷 sent an image':msg.content,
+      icon:LOGO_SRC,
+      badge:LOGO_SRC,
+      tag:msg.room_id, // replaces previous notif from same room
+      renotify:true,
+      silent:false
+    });
+    n.onclick=function(){
+      window.focus();
+      n.close();
+    };
+  }catch(e){}
+}
+
+// Open a room by ID only — fetches room data first
+async function openRoomById(roomId){
+  try{
+    var r=await db.from('rooms').select('*').eq('id',roomId).single();
+    if(!r.data)return;
+    var room=r.data;
+    var isDm=room.name&&room.name.startsWith('DM:');
+    var displayName=room.name;
+    if(isDm){
+      try{
+        var names=JSON.parse(room.dm_display_names||'{}');
+        var other=Object.entries(names).filter(function(e){return e[0]!==me.id;}).map(function(e){return e[1];})[0];
+        if(other)displayName=other;
+      }catch(e){}
+    }
+    openRoom(room.id,displayName,room.image_url,room.created_by,isDm);
+  }catch(e){}
+}
+
 async function loadRooms(){
   byId('username-display').textContent=me.username;
   var mem=await db.from('room_members').select('room_id').eq('user_id',me.id);
@@ -1069,10 +1238,13 @@ function renderRooms(rooms,previews){
     if(isDm){try{var dn=JSON.parse(r.dm_display_names||'{}');otherUid=Object.keys(dn).find(function(k){return k!==me.id;})||'';}catch(e){}}
     var dotHtml=isDm?('<div class="online-dot"'+(otherUid?' data-uid="'+otherUid+'"':'')+
       (onlineUsers[otherUid]?' style="display:block"':'')+'></div>'):'';
+    var unread=unreadCounts[r.id]||0;
+    var badgeHtml=unread>0?'<div class="unread-badge">'+unread+'</div>':'';
     div.innerHTML='<div class="room-av-wrap"><div class="room-avatar" style="'+(isDm?'border-radius:50%':'')+'">'+avatarInner+'</div>'+dotHtml+'</div>'+
       '<div class="room-info"><div class="room-name">'+escH(displayName)+'</div>'+
       '<div class="room-preview">'+previewTxt+'</div></div>'+
-      '<div class="room-time">'+time+'</div>';
+      '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'+
+      '<div class="room-time">'+time+'</div>'+badgeHtml+'</div>';
     div.addEventListener('click',function(){openRoom(r.id,displayName,r.image_url,r.created_by,isDm);});
     list.appendChild(div);
   });
@@ -1098,6 +1270,7 @@ async function doCreateRoom(){
     if(r.error)throw r.error;
     await db.from('room_members').insert({room_id:r.data.id,user_id:me.id});
     closeModal('modal-create');showToast('Room created! Share the Room ID.');
+    globalListenerAddRoom(r.data.id);
     await loadRooms();openRoom(r.data.id,r.data.name,r.data.image_url,r.data.created_by);
   }catch(e){err.textContent='Error: '+e.message;}
   finally{btn.disabled=false;btn.textContent='Create Room';}
@@ -1113,12 +1286,15 @@ async function doJoinRoom(){
     if(ex.data){err.textContent='Already in this room.';return;}
     await db.from('room_members').insert({room_id:roomId,user_id:me.id});
     closeModal('modal-join');showToast('Joined '+r.data.name+'! 🎉');
+    globalListenerAddRoom(roomId);
     await loadRooms();openRoom(r.data.id,r.data.name,r.data.image_url,r.data.created_by);
   }catch(e){err.textContent='Error: '+e.message;}
 }
 
 // ══ CHAT ══
 async function openRoom(roomId,roomName,imageUrl,createdBy,isDm){
+  // Clear unread for this room
+  unreadCounts[roomId]=0;
   activeRoom={id:roomId,name:roomName,imageUrl:imageUrl||null,createdBy:createdBy||null,isDm:!!isDm};
   navPush('chat');
   byId('chat-title').textContent=roomName;
