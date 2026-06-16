@@ -1,0 +1,2206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="FLASH"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#000000"/>
+<meta name="application-name" content="FLASH"/>
+<link id="pwa-icon" rel="apple-touch-icon"/>
+<link id="pwa-icon2" rel="icon" type="image/png"/>
+<link id="pwa-manifest" rel="manifest"/>
+<title>FLASH — Chat</title>
+<style>
+:root{
+  --bg:#000;--bg3:#1a1a1a;--bg4:#252525;--border:#2a2a2a;
+  --accent:#0a84ff;--accent2:#0070d9;--text:#fff;--text2:#ebebf5cc;--text3:#ebebf599;
+  --bubble-me:#0a84ff;--bubble-them:#1c1c1e;--danger:#ff453a;--success:#30d158;
+  --safe-top:env(safe-area-inset-top,44px);--safe-bot:env(safe-area-inset-bottom,20px);
+  --safe-left:env(safe-area-inset-left,0px);--safe-right:env(safe-area-inset-right,0px);
+  --app-w:480px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{height:100%;height:-webkit-fill-available;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{
+  height:100%;height:-webkit-fill-available;overflow:hidden;
+  background:#0a0a0a;color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;overscroll-behavior:none;
+  display:flex;justify-content:center;
+  /* screenshot deterrence: on print / screen capture APIs */
+  -webkit-user-select:none;user-select:none;
+}
+/* Allow text selection only in message bubbles */
+.bubble{-webkit-user-select:text;user-select:text}
+
+#app-shell{
+  position:relative;width:100%;max-width:var(--app-w);
+  height:100%;background:var(--bg);
+  box-shadow:0 0 80px #000;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+/* blur overlay when tab loses focus */
+#privacy-shield{
+  position:absolute;inset:0;z-index:9999;
+  background:rgba(0,0,0,.96);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;
+  pointer-events:none;
+}
+#privacy-shield.active{display:flex;}
+#privacy-shield span{font-size:36px;}
+#privacy-shield p{font-size:15px;color:var(--text3);}
+
+/* smoother screen transitions */
+.screen{
+  position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);
+  transition:transform .38s cubic-bezier(.32,.72,0,1),opacity .3s ease;will-change:transform;
+}
+.screen.hidden{transform:translateX(100%);opacity:0;pointer-events:none}
+.screen.slide-left{transform:translateX(-30%);opacity:0;pointer-events:none}
+
+/* ── DM / SEARCH ── */
+#dm-screen{background:var(--bg)}
+.search-bar-wrap{
+  padding:10px 14px;padding-top:max(calc(var(--safe-top)+8px),18px);
+  border-bottom:1px solid var(--border);
+  background:rgba(0,0,0,.92);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  flex-shrink:0;display:flex;align-items:center;gap:10px;
+}
+.search-input{
+  flex:1;background:var(--bg4);border:1.5px solid var(--border);
+  border-radius:20px;padding:10px 16px;color:var(--text);
+  outline:none;font-family:inherit;transition:border .2s;
+  -webkit-user-select:text;user-select:text;
+}
+.search-input:focus{border-color:var(--accent)}
+.search-input::placeholder{color:var(--text3)}
+.search-results{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.search-result-item{
+  display:flex;align-items:center;gap:13px;
+  padding:13px 16px;cursor:pointer;
+  transition:background .12s;border-bottom:1px solid var(--border);
+  min-height:64px;
+}
+.search-result-item:active{background:var(--bg3)}
+.user-av{
+  width:44px;height:44px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(145deg,var(--accent),#005ecb);
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;font-weight:700;color:#fff;
+}
+.user-name{font-size:16px;font-weight:600}
+.user-sub{font-size:13px;color:var(--text3);margin-top:2px}
+.dm-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text3);padding:60px 30px;text-align:center;flex:1}
+
+input,textarea,select{font-size:16px!important;-webkit-appearance:none;appearance:none;border-radius:0}
+
+/* ── AUTH ── */
+#auth-screen{
+  justify-content:center;align-items:center;
+  background:radial-gradient(ellipse at 50% 0%,#0a2540 0%,#000 65%);
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:max(var(--safe-top),20px) 20px max(var(--safe-bot),20px);
+}
+.auth-inner{display:flex;flex-direction:column;align-items:center;width:100%;max-width:380px;padding:20px 0}
+.auth-logo{width:84px;height:84px;border-radius:22px;overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:18px;flex-shrink:0;box-shadow:0 12px 40px #0006;background:#fff;}
+.auth-logo img{width:100%;height:100%;object-fit:contain;padding:6px}
+.auth-title{font-size:32px;font-weight:800;letter-spacing:-.5px;margin-bottom:5px}
+.auth-sub{color:var(--text3);font-size:15px;margin-bottom:30px;text-align:center}
+.auth-card{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:13px}
+.tab-row{display:flex;background:var(--bg4);border-radius:11px;padding:3px}
+.tab-btn{flex:1;padding:9px 8px;border:none;background:transparent;color:var(--text3);font-size:14px;font-weight:600;border-radius:8px;cursor:pointer;transition:all .2s;font-family:inherit;min-height:44px}
+.tab-btn.active{background:var(--bg3);color:var(--text);box-shadow:0 2px 8px #0004}
+.inp-wrap{position:relative}
+.inp-wrap input{width:100%;padding:14px 16px;background:var(--bg4);border:1.5px solid var(--border);border-radius:13px;color:var(--text);outline:none;transition:border .2s;font-family:inherit}
+.inp-wrap input:focus{border-color:var(--accent)}
+.inp-wrap input::placeholder{color:var(--text3)}
+.btn-primary{padding:15px;background:var(--accent);border:none;border-radius:13px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;transition:all .15s;width:100%;font-family:inherit;min-height:50px;touch-action:manipulation}
+.btn-primary:active{transform:scale(.97);background:var(--accent2)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.btn-danger{background:var(--danger)!important}.btn-danger:active{background:#cc3830!important}
+.auth-msg{font-size:13px;text-align:center;min-height:18px;padding:0 4px}
+.auth-msg.err{color:var(--danger)}.auth-msg.ok{color:var(--success)}
+.pw-strength{height:3px;border-radius:2px;background:var(--bg4);overflow:hidden;margin-top:-4px}
+.pw-strength-fill{height:100%;width:0;border-radius:2px;transition:width .3s,background .3s}
+.lockout-banner{background:#ff453a22;border:1px solid var(--danger);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--danger);text-align:center;display:none}
+
+/* ── NAV BAR ── */
+.nav-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;padding-top:max(calc(var(--safe-top) + 10px),20px);border-bottom:1px solid var(--border);background:rgba(0,0,0,.92);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);flex-shrink:0;}
+.nav-left{display:flex;align-items:center;gap:10px}
+.nav-logo{width:30px;height:30px;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
+.nav-logo img{width:100%;height:100%;object-fit:contain;padding:3px}
+.nav-title{font-size:20px;font-weight:800;letter-spacing:-.3px}
+.nav-sub{font-size:12px;color:var(--text3);margin-top:1px}
+.nav-actions{display:flex;gap:6px;align-items:center}
+.icon-btn{width:38px;height:38px;border-radius:50%;border:none;background:var(--bg3);color:var(--text);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s;font-family:inherit;flex-shrink:0;touch-action:manipulation}
+.icon-btn:active{background:var(--bg4)}
+
+/* ── ROOMS ── */
+#rooms-screen{background:var(--bg)}
+.rooms-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.room-item{display:flex;align-items:center;gap:13px;padding:13px 16px;cursor:pointer;transition:background .12s;border-bottom:1px solid var(--border);min-height:72px}
+.room-item:active{background:var(--bg3)}
+.room-avatar{width:50px;height:50px;border-radius:15px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(145deg,var(--accent),#005ecb);overflow:hidden}
+.room-avatar img{width:100%;height:100%;object-fit:cover}
+.room-info{flex:1;min-width:0}
+.room-name{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.room-preview{font-size:13px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.room-time{font-size:12px;color:var(--text3);flex-shrink:0}
+.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text3);padding:40px;text-align:center}
+.empty-icon{font-size:52px;opacity:.35}
+.empty-title{font-size:18px;font-weight:600;color:var(--text2)}
+.empty-body{font-size:14px;line-height:1.5}
+
+/* ── CHAT ── */
+#chat-screen{background:var(--bg)}
+.chat-nav{display:flex;align-items:center;gap:8px;padding:10px 12px;padding-top:max(calc(var(--safe-top) + 8px),18px);border-bottom:1px solid var(--border);background:rgba(0,0,0,.92);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);flex-shrink:0;}
+.back-btn{font-size:28px;background:none;border:none;color:var(--accent);cursor:pointer;padding:4px 6px 4px 2px;font-family:inherit;min-width:40px;min-height:44px;display:flex;align-items:center;touch-action:manipulation}
+.chat-avatar{width:36px;height:36px;border-radius:10px;background:linear-gradient(145deg,var(--accent),#005ecb);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;overflow:hidden}
+.chat-avatar img{width:100%;height:100%;object-fit:cover}
+.chat-info{flex:1;min-width:0}
+.chat-name{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-sub{font-size:11px;color:var(--text3);margin-top:1px}
+
+/* messages */
+.messages-area{
+  flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  padding:12px 14px;display:flex;flex-direction:column;gap:3px;
+  /* block right-click save on desktop */
+}
+.messages-area img{pointer-events:none;-webkit-user-drag:none;user-drag:none;}
+
+.msg-row{display:flex;align-items:flex-end;gap:7px;max-width:85%}
+.msg-row.mine{align-self:flex-end;flex-direction:row-reverse}
+.msg-row.theirs{align-self:flex-start}
+.msg-avatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;background:linear-gradient(145deg,#555,#333);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff}
+.msg-group{display:flex;flex-direction:column;gap:2px;max-width:100%}
+.msg-sender{font-size:11px;color:var(--text3);margin-bottom:2px;padding:0 5px}
+.mine .msg-sender{text-align:right}
+.bubble{padding:9px 13px;border-radius:17px;font-size:15px;line-height:1.45;word-break:break-word;max-width:100%;-webkit-user-select:text;user-select:text}
+.mine .bubble{background:var(--bubble-me);color:#fff;border-bottom-right-radius:4px}
+.theirs .bubble{background:var(--bubble-them);color:var(--text);border-bottom-left-radius:4px}
+.msg-time{font-size:10px;color:var(--text3);padding:0 5px}
+.system-msg{align-self:center;font-size:11px;color:var(--text3);background:var(--bg3);border-radius:9px;padding:3px 10px;margin:5px 0}
+
+/* image bubbles */
+.img-bubble{
+  padding:3px;cursor:pointer;position:relative;overflow:hidden;
+  max-width:220px;
+}
+.img-bubble img{
+  width:100%;max-width:220px;max-height:260px;
+  object-fit:cover;border-radius:14px;display:block;
+  pointer-events:none;-webkit-user-drag:none;
+  /* watermark via CSS filter — mild deterrent */
+}
+.img-bubble .wm{
+  position:absolute;bottom:8px;right:8px;
+  font-size:10px;color:rgba(255,255,255,.45);
+  background:rgba(0,0,0,.3);border-radius:4px;padding:2px 5px;
+  pointer-events:none;letter-spacing:.3px;
+}
+.img-bubble .img-status{
+  font-size:10px;color:var(--text3);text-align:center;padding:2px 0 4px;
+}
+/* uploading progress */
+.img-uploading{
+  width:180px;height:100px;border-radius:14px;background:var(--bg4);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+}
+.upload-bar{width:120px;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.upload-bar-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .2s}
+
+/* input bar */
+.chat-input-bar{display:flex;align-items:flex-end;gap:8px;padding:9px 12px;padding-bottom:max(calc(var(--safe-bot) + 8px),16px);border-top:1px solid var(--border);background:rgba(0,0,0,.96);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);flex-shrink:0;}
+.msg-input{flex:1;background:var(--bg3);border:1.5px solid var(--border);border-radius:20px;padding:10px 15px;color:var(--text);outline:none;resize:none;max-height:120px;line-height:1.4;transition:border .2s;font-family:inherit;-webkit-overflow-scrolling:touch;-webkit-user-select:text;user-select:text;}
+.msg-input:focus{border-color:var(--accent)}
+.msg-input::placeholder{color:var(--text3)}
+.send-btn{width:38px;height:38px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:15px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;flex-shrink:0;font-family:inherit;touch-action:manipulation}
+.send-btn:active{transform:scale(.9);background:var(--accent2)}
+.img-send-btn{background:var(--bg3);color:var(--text3);font-size:18px}
+.img-send-btn:active{background:var(--bg4)}
+
+/* image preview — inline inside input bar, Instagram style */
+.img-attach-wrap{
+  position:relative;flex-shrink:0;display:none;
+}
+.img-attach-wrap.visible{display:block;}
+.img-preview-thumb{
+  width:52px;height:52px;border-radius:10px;object-fit:cover;display:block;
+}
+/* blurry frosted border around thumb */
+.img-attach-wrap::before{
+  content:'';position:absolute;inset:-3px;border-radius:13px;
+  background:rgba(255,255,255,.12);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.18);
+  pointer-events:none;z-index:0;
+}
+.img-preview-thumb{position:relative;z-index:1;}
+.img-preview-clear{
+  position:absolute;top:-6px;right:-6px;z-index:2;
+  width:20px;height:20px;border-radius:50%;
+  background:#fff;border:none;
+  color:#000;font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;line-height:1;
+  box-shadow:0 1px 4px rgba(0,0,0,.4);
+}
+
+/* image lightbox */
+#lightbox{
+  position:absolute;inset:0;z-index:500;background:rgba(0,0,0,.95);
+  display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;
+}
+#lightbox.open{display:flex;}
+#lightbox-img{
+  max-width:100%;max-height:80vh;object-fit:contain;border-radius:12px;
+  pointer-events:none;-webkit-user-drag:none;
+}
+#lightbox-wm{font-size:12px;color:rgba(255,255,255,.3);letter-spacing:.5px;}
+#lightbox-close{position:absolute;top:max(calc(var(--safe-top) + 8px),20px);right:16px;background:var(--bg3);border:none;color:var(--text);font-size:22px;width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+
+/* ── MODALS ── */
+.modal-overlay{position:absolute;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:flex-end;justify-content:center;z-index:200;opacity:0;pointer-events:none;transition:opacity .22s;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal-sheet{width:100%;background:var(--bg3);border-radius:20px 20px 0 0;padding:18px;padding-bottom:max(calc(var(--safe-bot)+20px),28px);transform:translateY(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;gap:13px;max-height:88%;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.modal-overlay.open .modal-sheet{transform:translateY(0)}
+.modal-handle{width:34px;height:4px;border-radius:2px;background:var(--bg4);margin:0 auto 4px;flex-shrink:0}
+.modal-title{font-size:17px;font-weight:700;flex-shrink:0}
+.modal-sub{font-size:13px;color:var(--text3);margin-top:-6px}
+.btn-secondary{flex:1;padding:14px;background:var(--bg4);border:none;border-radius:13px;color:var(--text);font-size:15px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit;min-height:50px}
+.btn-secondary:active{opacity:.7}
+.btn-row{display:flex;gap:10px}
+.img-upload-area{display:flex;align-items:center;gap:12px}
+.img-preview-box{width:56px;height:56px;border-radius:14px;background:var(--bg4);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;flex-shrink:0;cursor:pointer;transition:border .2s}
+.img-preview-box:hover{border-color:var(--accent)}
+.img-preview-box img{width:100%;height:100%;object-fit:cover}
+.copy-btn{position:absolute;top:8px;right:8px;background:var(--bg4);border:none;color:var(--text2);border-radius:7px;padding:5px 11px;font-size:12px;cursor:pointer;font-family:inherit}
+.code-block{background:var(--bg);border:1px solid var(--border);border-radius:11px;padding:13px 60px 13px 13px;font-family:monospace;font-size:12px;color:#50fa7b;word-break:break-all;line-height:1.5;position:relative}
+.member-row{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--border)}
+.member-row:last-child{border-bottom:none}
+.member-av{width:32px;height:32px;border-radius:50%;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:14px}
+.action-item{display:flex;align-items:center;gap:12px;padding:14px 4px;cursor:pointer;border-radius:12px;transition:background .12s;font-size:15px}
+.action-item:active{background:var(--bg4)}
+.action-item.red{color:var(--danger)}
+.action-icon{font-size:20px;width:32px;text-align:center;flex-shrink:0}
+.divider{height:1px;background:var(--border);margin:2px 0}
+
+/* misc */
+::-webkit-scrollbar{width:0;height:0}
+.spinner{width:20px;height:20px;border:2px solid #fff4;border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:inline-block;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+#toast{position:absolute;bottom:max(calc(var(--safe-bot)+70px),80px);left:50%;transform:translateX(-50%) translateY(14px);background:#333;color:#fff;padding:10px 18px;border-radius:20px;font-size:14px;z-index:999;opacity:0;transition:all .28s;pointer-events:none;white-space:nowrap;max-width:calc(100% - 40px);overflow:hidden;text-overflow:ellipsis}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.conn-dot{width:7px;height:7px;border-radius:50%;background:var(--danger);display:inline-block;margin-right:4px;vertical-align:middle}
+.conn-dot.online{background:var(--success)}
+
+/* ── IN-APP NOTIFICATION BANNER ── */
+#notif-banner{
+  position:absolute;top:0;left:0;right:0;z-index:8000;
+  background:var(--bg3);border-bottom:1px solid var(--border);
+  padding:12px 16px;padding-top:max(calc(var(--safe-top) + 10px),18px);
+  display:flex;align-items:center;gap:10px;cursor:pointer;
+  transform:translateY(-110%);transition:transform .32s cubic-bezier(.32,.72,0,1);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+}
+#notif-banner.show{transform:translateY(0);}
+#notif-av{width:36px;height:36px;border-radius:50%;background:linear-gradient(145deg,var(--accent),#005ecb);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;flex-shrink:0;}
+#notif-body{flex:1;min-width:0;}
+#notif-name{font-size:13px;font-weight:700;color:var(--text)}
+#notif-msg{font-size:13px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* unread badge on room list */
+.unread-badge{
+  min-width:20px;height:20px;border-radius:10px;
+  background:var(--accent);color:#fff;
+  font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 5px;flex-shrink:0;
+}
+
+.msg-ticks{font-size:11px;color:var(--text3);margin-left:3px;letter-spacing:-1px}
+.msg-ticks.delivered{color:var(--text3)}
+.msg-ticks.read{color:#34b7f1}
+
+/* ── REPLY QUOTE ── */
+.reply-bar{
+  display:none;align-items:center;gap:10px;
+  padding:8px 12px;background:rgba(0,0,0,.96);
+  border-top:1px solid var(--border);
+  border-left:3px solid var(--accent);flex-shrink:0;
+}
+.reply-bar.visible{display:flex;}
+.reply-bar-text{flex:1;font-size:13px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reply-bar-cancel{background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:2px 4px;line-height:1}
+.reply-quote{
+  border-left:3px solid var(--accent);
+  padding:4px 8px;border-radius:4px;margin-bottom:4px;
+  background:rgba(255,255,255,.06);font-size:12px;color:var(--text3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;
+}
+.theirs .reply-quote{border-left-color:var(--text3);}
+
+/* ── TYPING INDICATOR ── */
+#typing-indicator{
+  display:none;align-items:center;gap:6px;
+  padding:4px 16px 2px;flex-shrink:0;
+}
+#typing-indicator.visible{display:flex;}
+#typing-indicator span{font-size:12px;color:var(--text3);font-style:italic}
+.typing-dots{display:flex;gap:3px;align-items:center}
+.typing-dots i{
+  width:5px;height:5px;border-radius:50%;background:var(--text3);
+  animation:tdot 1.2s infinite ease-in-out;
+  display:inline-block;
+}
+.typing-dots i:nth-child(2){animation-delay:.2s}
+.typing-dots i:nth-child(3){animation-delay:.4s}
+@keyframes tdot{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-4px);opacity:1}}
+
+/* ── ONLINE PRESENCE DOT on room avatars ── */
+.room-av-wrap{position:relative;flex-shrink:0}
+.online-dot{
+  position:absolute;bottom:1px;right:1px;
+  width:10px;height:10px;border-radius:50%;
+  background:var(--success);border:2px solid var(--bg);
+  display:none;
+}
+.online-dot.visible{display:block;}
+
+/* ── LINK PREVIEW ── */
+.link-preview{
+  margin-top:6px;border-radius:12px;overflow:hidden;
+  border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);
+  max-width:240px;cursor:pointer;text-decoration:none;display:block;
+}
+.link-preview-img{width:100%;height:120px;object-fit:cover;display:block}
+.link-preview-body{padding:8px 10px}
+.link-preview-title{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.link-preview-url{font-size:11px;color:var(--accent);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.link-preview-loading{padding:12px 10px;font-size:12px;color:var(--text3)}
+
+
+/* ── VIDEO BUBBLES ── */
+.vid-bubble{
+  position:relative;max-width:260px;border-radius:14px;overflow:hidden;cursor:pointer;
+  background:#000;
+}
+.vid-bubble video{
+  width:100%;max-height:320px;display:block;object-fit:cover;
+  border-radius:14px;
+  /* prevent save/download */
+  -webkit-user-select:none;user-select:none;
+  pointer-events:none; /* tap handled by wrapper */
+  controlsList:nodownload;
+  disablePictureInPicture:true;
+}
+.vid-bubble.playing video{pointer-events:auto;}
+.vid-play-btn{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.38);transition:opacity .2s;
+}
+.vid-play-btn svg{width:48px;height:48px;filter:drop-shadow(0 2px 6px #0008);}
+.vid-bubble.playing .vid-play-btn{opacity:0;pointer-events:none;}
+.vid-expired{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;padding:24px 20px;opacity:.5;
+}
+
+/* video preview in input bar — same style as img-attach-wrap */
+.vid-attach-wrap{
+  position:relative;flex-shrink:0;display:none;
+}
+.vid-attach-wrap.visible{display:block;}
+.vid-preview-thumb{
+  width:52px;height:52px;border-radius:10px;object-fit:cover;display:block;position:relative;z-index:1;
+}
+.vid-attach-wrap::before{
+  content:'';position:absolute;inset:-3px;border-radius:13px;
+  background:rgba(255,255,255,.12);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.18);pointer-events:none;z-index:0;
+}
+.vid-attach-wrap::after{
+  content:'▶';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:#fff;text-shadow:0 1px 4px #000a;z-index:2;pointer-events:none;
+}
+.vid-preview-clear{
+  position:absolute;top:-6px;right:-6px;z-index:3;
+  width:20px;height:20px;border-radius:50%;
+  background:#fff;border:none;color:#000;font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.4);
+}
+/* no-screenshot CSS for supported browsers (Firefox print, some Chromium) */
+@media print{#app-shell{display:none!important}}
+</style>
+</head>
+<body>
+<div id="app-shell">
+
+<!-- in-app notification banner -->
+<div id="notif-banner">
+  <div id="notif-av">?</div>
+  <div id="notif-body">
+    <div id="notif-name"></div>
+    <div id="notif-msg"></div>
+  </div>
+</div>
+
+<!-- privacy shield (blurs on focus loss) -->
+<div id="privacy-shield">
+  <span>🔒</span>
+  <p>Return to FLASH to continue</p>
+</div>
+
+<!-- lightbox -->
+<div id="lightbox">
+  <button id="lightbox-close" aria-label="Close">✕</button>
+  <img id="lightbox-img" alt=""/>
+  <div id="lightbox-wm"></div>
+</div>
+
+<!-- ═══ AUTH ═══ -->
+<div class="screen" id="auth-screen">
+  <div class="auth-inner">
+    <div class="auth-logo"><img id="auth-logo-img" alt="FLASH"/></div>
+    <div class="auth-title">FLASH</div>
+    <div class="auth-sub">Fast, private messaging</div>
+    <div class="auth-card">
+      <div class="tab-row">
+        <button class="tab-btn active" id="tab-login">Sign In</button>
+        <button class="tab-btn" id="tab-signup">Create Account</button>
+      </div>
+      <div class="inp-wrap"><input type="text" id="auth-username" placeholder="Username" autocomplete="username" autocorrect="off" autocapitalize="none" spellcheck="false" maxlength="30"/></div>
+      <div class="inp-wrap"><input type="password" id="auth-password" placeholder="Password" autocomplete="current-password" maxlength="128"/></div>
+      <div class="pw-strength" id="pw-strength-bar" style="display:none"><div class="pw-strength-fill" id="pw-strength-fill"></div></div>
+      <div class="inp-wrap" id="confirm-wrap" style="display:none"><input type="password" id="auth-confirm" placeholder="Confirm password" autocomplete="new-password" maxlength="128"/></div>
+      <div class="lockout-banner" id="lockout-banner"></div>
+      <div class="auth-msg" id="auth-msg"></div>
+      <button class="btn-primary" id="auth-btn">Sign In</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ROOMS ═══ -->
+<div class="screen hidden" id="rooms-screen">
+  <div class="nav-bar">
+    <div class="nav-left">
+      <div class="nav-logo"><img id="nav-logo-img" alt=""/></div>
+      <div>
+        <div class="nav-title">FLASH</div>
+        <div class="nav-sub"><span class="conn-dot" id="conn-dot"></span><span id="username-display">...</span></div>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <button class="icon-btn" id="btn-dm"       title="Direct message">🔍</button>
+      <button class="icon-btn" id="btn-join-room" title="Join room">🔗</button>
+      <button class="icon-btn" id="btn-new-room"  title="New room">✏️</button>
+      <button class="icon-btn" id="btn-logout"    title="Sign out">🚪</button>
+    </div>
+  </div>
+  <div class="rooms-list" id="rooms-list"></div>
+</div>
+
+<!-- ═══ DM SEARCH SCREEN ═══ -->
+<div class="screen hidden" id="dm-screen">
+  <div class="search-bar-wrap">
+    <button class="back-btn" id="btn-dm-back" style="font-size:28px;min-width:36px">‹</button>
+    <input class="search-input" id="dm-search-inp" type="text"
+      placeholder="Enter exact username…"
+      autocorrect="off" autocapitalize="none" spellcheck="false" maxlength="30"/>
+    <button class="send-btn" id="dm-search-btn" style="flex-shrink:0">🔍</button>
+  </div>
+  <div class="search-results" id="dm-results">
+    <div class="dm-empty">
+      <span style="font-size:44px;opacity:.3">💬</span>
+      <span style="font-size:15px;font-weight:600;color:var(--text2)">New Message</span>
+      <span style="font-size:14px">Type the exact username and tap Search</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CHAT ═══ -->
+<div class="screen hidden" id="chat-screen">
+  <div class="chat-nav">
+    <button class="back-btn" id="btn-back">‹</button>
+    <div class="chat-avatar" id="chat-avatar-el">💬</div>
+    <div class="chat-info">
+      <div class="chat-name" id="chat-title">Room</div>
+      <div class="chat-sub"  id="chat-sub">loading...</div>
+    </div>
+    <button class="icon-btn" id="btn-room-info" style="font-size:15px">⋮</button>
+  </div>
+  <div class="messages-area" id="messages-area"></div>
+  <!-- typing indicator -->
+  <div id="typing-indicator">
+    <div class="typing-dots"><i></i><i></i><i></i></div>
+    <span id="typing-text">someone is typing</span>
+  </div>
+  <!-- reply bar -->
+  <div class="reply-bar" id="reply-bar">
+    <div class="reply-bar-text" id="reply-bar-text"></div>
+    <button class="reply-bar-cancel" id="btn-cancel-reply">✕</button>
+  </div>
+  <!-- media preview + input bar -->
+  <div class="chat-input-bar">
+    <button class="send-btn img-send-btn" id="btn-attach" aria-label="Attach image" title="Send image">📎</button>
+    <button class="send-btn img-send-btn" id="btn-attach-vid" aria-label="Attach video" title="Send video">🎥</button>
+    <input type="file" id="img-file-input" accept="image/*" style="display:none"/>
+    <input type="file" id="vid-file-input" accept="video/*" style="display:none"/>
+    <!-- image preview -->
+    <div class="img-attach-wrap" id="img-attach-wrap">
+      <img id="img-preview-thumb" class="img-preview-thumb" alt=""/>
+      <button class="img-preview-clear" id="btn-clear-img" aria-label="Remove image">✕</button>
+    </div>
+    <!-- video preview -->
+    <div class="vid-attach-wrap" id="vid-attach-wrap">
+      <video id="vid-preview-thumb" class="vid-preview-thumb" muted playsinline></video>
+      <button class="vid-preview-clear" id="btn-clear-vid" aria-label="Remove video">✕</button>
+    </div>
+    <textarea class="msg-input" id="msg-input" placeholder="Message" rows="1"></textarea>
+    <button class="send-btn" id="btn-send">▲</button>
+  </div>
+</div>
+
+<!-- ═══ MODAL: CREATE ROOM ═══ -->
+<div class="modal-overlay" id="modal-create">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">New Chat Room</div>
+    <div class="img-upload-area">
+      <div class="img-preview-box" id="room-img-preview">📷</div>
+      <div style="font-size:14px;color:var(--text3);line-height:1.5">Tap to add a room photo<br><span style="font-size:12px;opacity:.6">Optional · max 1MB</span></div>
+    </div>
+    <input type="file" id="room-img-input" accept="image/*" style="display:none"/>
+    <div class="inp-wrap"><input type="text" id="room-name-inp" placeholder="Room name" maxlength="40" autocorrect="off"/></div>
+    <div class="auth-msg err" id="room-err"></div>
+    <button class="btn-primary" id="btn-create-room">Create Room</button>
+  </div>
+</div>
+
+<!-- ═══ MODAL: JOIN ROOM ═══ -->
+<div class="modal-overlay" id="modal-join">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Join a Room</div>
+    <div class="modal-sub">Paste the Room ID your friend shared.</div>
+    <div class="inp-wrap"><input type="text" id="join-inp" placeholder="Room ID" autocorrect="off" autocapitalize="none" spellcheck="false"/></div>
+    <div class="auth-msg err" id="join-err"></div>
+    <button class="btn-primary" id="btn-join">Join Room</button>
+  </div>
+</div>
+
+<!-- ═══ MODAL: ROOM OPTIONS ═══ -->
+<div class="modal-overlay" id="modal-room-options">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="opt-room-title">Options</div>
+
+    <!-- Room-only: ID section -->
+    <div id="dm-id-section">
+      <div class="modal-sub">Room ID — share to invite:</div>
+      <div class="code-block" id="opt-room-id"><button class="copy-btn" id="btn-copy-room-id">copy</button></div>
+    </div>
+
+    <div class="divider" id="dm-divider1"></div>
+
+    <!-- Room-only: members section -->
+    <div id="dm-members-section">
+      <div style="font-size:12px;color:var(--text3);font-weight:600;letter-spacing:.5px">MEMBERS</div>
+      <div id="opt-members-list"></div>
+    </div>
+
+    <div class="divider" id="dm-divider2"></div>
+
+    <div class="action-item" id="opt-clear-chats">
+      <span class="action-icon">🗑️</span>
+      <div><div style="font-weight:600">Clear Chat History</div><div style="font-size:12px;color:var(--text3)">Wipe your local messages</div></div>
+    </div>
+    <!-- DM-only: block user -->
+    <div class="action-item red" id="opt-block-user" style="display:none">
+      <span class="action-icon">🚫</span>
+      <div><div style="font-weight:600">Delete Conversation</div><div style="font-size:12px;opacity:.7">Removes this DM from your chats</div></div>
+    </div>
+    <!-- Room-only: leave -->
+    <div class="action-item red" id="opt-leave-room">
+      <span class="action-icon">🚪</span>
+      <div><div style="font-weight:600">Leave Room</div><div style="font-size:12px;opacity:.7">You can rejoin with the Room ID</div></div>
+    </div>
+    <!-- Room creator only: delete -->
+    <div class="action-item red" id="opt-delete-room" style="display:none">
+      <span class="action-icon">💥</span>
+      <div><div style="font-weight:600">Delete Room</div><div style="font-size:12px;opacity:.7">Deletes room &amp; all messages for everyone</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: CONFIRM ═══ -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="confirm-title">Are you sure?</div>
+    <div class="modal-sub" id="confirm-body"></div>
+    <div class="btn-row" style="margin-top:6px">
+      <button class="btn-secondary" id="btn-confirm-cancel">Cancel</button>
+      <button class="btn-primary btn-danger" id="btn-confirm-ok">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+</div><!-- /app-shell -->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+(function(){
+'use strict';
+// ── CONFIG ──
+var SUPA_URL='https://esiedtsmcvbgfrzfrhbc.supabase.co';
+var SUPA_KEY='sb_publishable_04hk_ZVTUxqgQznnPZVeGw_IHsaxWbV';
+var LOGO_SRC='data:image/png;base64,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';
+
+// ── SECURITY / LIMITS ──
+var MAX_ATTEMPTS=5,LOCKOUT_MS=300000,SESSION_MS=43200000,PBKDF2_ITER=200000,MIN_PW=8;
+var MAX_IMG_BYTES=5*1024*1024;   // 5 MB
+var MAX_VID_BYTES=50*1024*1024;  // 50 MB
+var IMG_TTL_MS=2*24*3600*1000;   // 2 days in ms (for expiry check)
+var SUPA_BUCKET='flash-images';  // Supabase Storage bucket (images + videos)
+var vidUrlCache={};              // msgId -> signed URL (session memory cache)
+
+// ── KEYS ──
+var SESS_KEY='flash_session',CACHE_PFX='flash_msgs_',IMG_CACHE_PFX='flash_img_';
+
+// ── STATE ──
+var db=null,me=null,activeRoom=null,realtimeSub=null,presenceSub=null,globalSub=null,authMode='login';
+var pendingConfirm=null;
+var pendingImgFile=null,pendingImgDataUrl=null,pendingCompressing=false;
+var pendingVidFile=null,pendingVidDataUrl=null; // video waiting to send
+var roomImgDataUrl=null;
+var replyTo=null;          // {id, username, content} of message being replied to
+var typingTimer=null;      // debounce for sending typing events
+var onlineUsers={};        // userId -> true for presence
+
+// ══ BOOT ══
+document.addEventListener('DOMContentLoaded',function(){
+  db=window.supabase.createClient(SUPA_URL,SUPA_KEY,{realtime:{params:{eventsPerSecond:10}}});
+  ['auth-logo-img','nav-logo-img'].forEach(function(id){var el=byId(id);if(el)el.src=LOGO_SRC;});
+  setupPWA();
+  wireEvents();
+  setupPrivacyShield();
+  blockContextMenu();
+  fixVh(); window.addEventListener('resize',fixVh);
+  // Push initial history state so back button works
+  history.replaceState({screen:'home'},'');
+  window.addEventListener('popstate',handlePopState);
+  var sess=sessLoad();
+  if(sess){
+    if(Date.now()-sess.loginTime>SESSION_MS){sessClear();showScreen('auth-screen');}
+    else{me=sess;showScreen('rooms-screen');loadRooms();pingConn();startGlobalListener();requestNotifPermission();}
+  } else showScreen('auth-screen');
+});
+
+function fixVh(){document.documentElement.style.setProperty('--vh',(window.innerHeight*.01)+'px');}
+
+// ══ PWA SETUP ══
+function setupPWA(){
+  // Inject manifest as blob so logo appears on home screen
+  var manifest={
+    name:'FLASH',short_name:'FLASH',
+    description:'Fast, private messaging',
+    start_url:window.location.href,
+    display:'standalone',
+    background_color:'#000000',
+    theme_color:'#000000',
+    orientation:'portrait',
+    icons:[
+      {src:LOGO_SRC,sizes:'192x192',type:'image/png',purpose:'any maskable'},
+      {src:LOGO_SRC,sizes:'512x512',type:'image/png',purpose:'any maskable'}
+    ]
+  };
+  var blob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  byId('pwa-manifest').href=url;
+  // Apple touch icon
+  byId('pwa-icon').href=LOGO_SRC;
+  byId('pwa-icon2').href=LOGO_SRC;
+  // Register inline service worker for offline + PWA install
+  if('serviceWorker' in navigator){
+    var swCode=`
+self.addEventListener('install',e=>self.skipWaiting());
+self.addEventListener('activate',e=>self.clients.claim());
+self.addEventListener('fetch',function(e){
+  if(e.request.method!=='GET')return;
+  e.respondWith(
+    caches.open('flash-v1').then(function(cache){
+      return fetch(e.request).then(function(res){
+        if(res&&res.status===200&&e.request.url.startsWith('http'))
+          cache.put(e.request,res.clone());
+        return res;
+      }).catch(function(){return caches.match(e.request);});
+    })
+  );
+});
+self.addEventListener('push',function(e){
+  if(!e.data)return;
+  var d=e.data.json();
+  self.registration.showNotification(d.title,{
+    body:d.body,icon:'/icon.png',badge:'/icon.png',
+    data:d.data,vibrate:[200,100,200]
+  });
+});
+self.addEventListener('notificationclick',function(e){
+  e.notification.close();
+  e.waitUntil(clients.openWindow('/'));
+});
+    `;
+    var swBlob=new Blob([swCode],{type:'application/javascript'});
+    var swUrl=URL.createObjectURL(swBlob);
+    navigator.serviceWorker.register(swUrl,{scope:'/'}).catch(function(){});
+  }
+}
+
+// ══ ANDROID/BROWSER BACK BUTTON ══
+function handlePopState(e){
+  var state=e.state||{};
+  // Close any open modal first
+  var anyOpen=['modal-create','modal-join','modal-room-options','modal-confirm'].some(function(id){
+    if(byId(id).classList.contains('open')){closeModal(id);return true;}
+    return false;
+  });
+  if(anyOpen){history.pushState({screen:state.screen||'home'},'');return;}
+  // Close lightbox
+  if(byId('lightbox').classList.contains('open')){closeLightbox();history.pushState({screen:'chat'},'');return;}
+  // Navigate screens
+  var cur=getCurrentScreen();
+  if(cur==='chat'){goBack();return;}
+  if(cur==='dm'){closeDmScreen();return;}
+  // On home screen — let the browser close/minimize naturally (don't push state)
+}
+function getCurrentScreen(){
+  if(!byId('chat-screen').classList.contains('hidden'))return'chat';
+  if(!byId('dm-screen').classList.contains('hidden'))return'dm';
+  if(!byId('rooms-screen').classList.contains('hidden'))return'home';
+  return'auth';
+}
+function navPush(screenName){
+  history.pushState({screen:screenName},'');
+}
+
+// ══ SCREENSHOT PREVENTION ══
+function setupPrivacyShield(){
+  // 1. Blur on visibility change (tab switch / screen record)
+  document.addEventListener('visibilitychange',function(){
+    byId('privacy-shield').classList.toggle('active',document.hidden);
+  });
+  // 2. Blur on window blur (desktop Alt+Tab / Cmd+Tab)
+  window.addEventListener('blur',function(){byId('privacy-shield').classList.add('active');});
+  window.addEventListener('focus',function(){byId('privacy-shield').classList.remove('active');});
+  // 3. Detect PrintScreen key (Windows) — can't block but can react
+  document.addEventListener('keyup',function(e){
+    if(e.key==='PrintScreen'){
+      // Briefly blank the screen after the fact
+      byId('privacy-shield').classList.add('active');
+      setTimeout(function(){byId('privacy-shield').classList.remove('active');},800);
+      showToast('⚠️ Screenshots are discouraged in FLASH.');
+    }
+  });
+  // 4. iOS/Android: visibilitychange covers most cases
+  // 5. CSS: -webkit-user-select:none on body (set in CSS)
+}
+
+function blockContextMenu(){
+  // Prevent right-click / long-press save on images in chat
+  byId('app-shell').addEventListener('contextmenu',function(e){
+    if(e.target.tagName==='IMG')e.preventDefault();
+  });
+}
+
+// ══ EVENT WIRING ══
+function wireEvents(){
+  on('tab-login',function(){switchTab('login');});
+  on('tab-signup',function(){switchTab('signup');});
+  on('auth-btn',doAuth);
+  byId('auth-password').addEventListener('keydown',function(e){if(e.key==='Enter')doAuth();});
+  byId('auth-confirm').addEventListener('keydown',function(e){if(e.key==='Enter')doAuth();});
+  byId('auth-password').addEventListener('input',updatePwStrength);
+
+  on('btn-dm',openDmScreen);
+  on('btn-dm-back',closeDmScreen);
+  on('btn-new-room',openCreateModal);
+  on('btn-join-room',openJoinModal);
+  on('btn-logout',doLogout);
+  on('btn-cancel-reply',cancelReply);
+  // Notification banner tap — open the relevant room
+  byId('notif-banner').addEventListener('click',function(){
+    var roomId=this.dataset.roomId;
+    this.classList.remove('show');
+    if(!roomId)return;
+    // Find room data from cache and open it
+    openRoomById(roomId);
+  });
+  on('btn-back',goBack);
+  on('btn-room-info',showRoomOptions);
+  on('btn-send',sendMsg);
+  on('btn-attach',function(){byId('img-file-input').click();});
+  on('btn-attach-vid',function(){byId('vid-file-input').click();});
+  on('btn-clear-vid',clearPendingVid);
+  byId('vid-file-input').addEventListener('change',handleVidSelect);
+  on('btn-create-room',doCreateRoom);
+  on('btn-join',doJoinRoom);
+  on('btn-clear-img',clearPendingImg);
+  on('lightbox-close',closeLightbox);
+
+  byId('img-file-input').addEventListener('change',handleImgSelect);
+  on('room-img-preview',function(){byId('room-img-input').click();});
+  byId('room-img-input').addEventListener('change',handleRoomImgSelect);
+
+  byId('msg-input').addEventListener('keydown',function(e){if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendMsg();}});
+  byId('dm-search-inp').addEventListener('keydown',function(e){if(e.key==='Enter')doDmSearch();});
+  byId('dm-search-btn').addEventListener('click',doDmSearch);
+  byId('msg-input').addEventListener('input',function(){autoResize(this);sendTyping();});
+  byId('room-name-inp').addEventListener('keydown',function(e){if(e.key==='Enter')doCreateRoom();});
+  byId('join-inp').addEventListener('keydown',function(e){if(e.key==='Enter')doJoinRoom();});
+
+  ['modal-create','modal-join','modal-room-options','modal-confirm'].forEach(function(id){
+    byId(id).addEventListener('click',function(e){if(e.target===this)closeModal(id);});
+  });
+
+  on('opt-clear-chats',function(){
+    showConfirm('Clear My Chats','Delete your local message history for this room. Others keep theirs.',function(){
+      cacheSave(activeRoom.id,[]);imgCacheClear(activeRoom.id);
+      renderMessages([]);closeModal('modal-room-options');showToast('Chat history cleared.');
+    });
+  });
+  on('opt-leave-room',function(){showConfirm('Leave Room','You will leave "'+activeRoom.name+'". Rejoin anytime with the Room ID.',doLeaveRoom);});
+  on('opt-block-user',function(){showConfirm('Delete Conversation','This removes the conversation from your chats. The other person won\'t be notified.',doDeleteDm);});
+  on('opt-delete-room',function(){showConfirm('Delete Room','Permanently deletes "'+activeRoom.name+'" and ALL messages & images for every member.',doDeleteRoom);});
+  on('btn-copy-room-id',function(){
+    var el=byId('opt-room-id');
+    var txt=el.childNodes[0]?el.childNodes[0].textContent.trim():'';
+    clip(txt);showToast('Room ID copied!');
+  });
+  on('btn-confirm-cancel',function(){closeModal('modal-confirm');pendingConfirm=null;});
+  on('btn-confirm-ok',function(){closeModal('modal-confirm');if(pendingConfirm){pendingConfirm();pendingConfirm=null;}});
+}
+function on(id,fn){var el=byId(id);if(el)el.addEventListener('click',fn);}
+function byId(id){return document.getElementById(id);}
+
+// ══ SESSION ══
+function sessLoad(){try{return JSON.parse(localStorage.getItem(SESS_KEY));}catch(e){return null;}}
+function sessSave(u){u.loginTime=Date.now();localStorage.setItem(SESS_KEY,JSON.stringify(u));}
+function sessClear(){localStorage.removeItem(SESS_KEY);}
+
+// ══ RATE LIMIT ══
+function rlKey(u){return'flash_rl_'+u;}
+function rlGet(u){try{return JSON.parse(localStorage.getItem(rlKey(u)))||{count:0,until:0};}catch(e){return{count:0,until:0};}}
+function rlSet(u,d){localStorage.setItem(rlKey(u),JSON.stringify(d));}
+function rlClear(u){localStorage.removeItem(rlKey(u));}
+function rlCheck(u){var r=rlGet(u);return r.until>Date.now()?r.until:null;}
+function rlFail(u){var r=rlGet(u);r.count=(r.count||0)+1;if(r.count>=MAX_ATTEMPTS){r.until=Date.now()+LOCKOUT_MS;r.count=0;}rlSet(u,r);return r;}
+function rlSuccess(u){rlClear(u);}
+
+// ══ AUTH ══
+function switchTab(mode){
+  authMode=mode;
+  byId('tab-login').classList.toggle('active',mode==='login');
+  byId('tab-signup').classList.toggle('active',mode==='signup');
+  byId('auth-btn').textContent=mode==='login'?'Sign In':'Create Account';
+  byId('auth-msg').textContent='';byId('lockout-banner').style.display='none';
+  byId('confirm-wrap').style.display=mode==='signup'?'block':'none';
+  byId('pw-strength-bar').style.display=mode==='signup'?'block':'none';
+  byId('auth-password').setAttribute('autocomplete',mode==='login'?'current-password':'new-password');
+}
+async function doAuth(){
+  var uname=byId('auth-username').value.trim().toLowerCase();
+  var pass=byId('auth-password').value,confirm=byId('auth-confirm').value;
+  var msg=byId('auth-msg'),btn=byId('auth-btn'),banner=byId('lockout-banner');
+  if(!uname||!pass){setMsg(msg,'Fill in all fields.',true);return;}
+  if(!/^[a-z0-9_]{3,30}$/.test(uname)){setMsg(msg,'Username: 3–30 chars, letters/numbers/_ only.',true);return;}
+  var locked=rlCheck(uname);
+  if(locked){banner.textContent='⚠️ Too many attempts. Try again in '+Math.ceil((locked-Date.now())/1000)+'s.';banner.style.display='block';return;}
+  banner.style.display='none';
+  if(authMode==='signup'){
+    if(pass.length<MIN_PW){setMsg(msg,'Password min '+MIN_PW+' chars.',true);return;}
+    if(pass!==confirm){setMsg(msg,'Passwords do not match.',true);return;}
+    if(pwScore(pass)<2){setMsg(msg,'Password too weak.',true);return;}
+  }
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';msg.textContent='';
+  try{
+    if(authMode==='signup'){
+      var chk=await db.from('users').select('id').eq('username',uname).maybeSingle();
+      if(chk.data){setMsg(msg,'Username taken.',true);return;}
+      var hd=await pbkdf2Hash(pass);
+      var ins=await db.from('users').insert({username:uname,password_hash:hd.salt+':'+hd.hash}).select().single();
+      if(ins.error)throw ins.error;
+      me={id:ins.data.id,username:ins.data.username};sessSave(me);showToast('Account created! 🎉');
+    } else {
+      var res=await db.from('users').select('id,username,password_hash').eq('username',uname).single();
+      if(res.error||!res.data){rlFail(uname);setMsg(msg,'Invalid username or password.',true);return;}
+      var ok=await pbkdf2Verify(pass,res.data.password_hash);
+      if(!ok){var rl=rlFail(uname);if(rl.until>Date.now()){banner.textContent='⚠️ Locked for '+Math.ceil((rl.until-Date.now())/1000)+'s.';banner.style.display='block';}else setMsg(msg,'Invalid username or password.',true);return;}
+      rlSuccess(uname);me={id:res.data.id,username:res.data.username};sessSave(me);
+    }
+    byId('username-display').textContent=me.username;
+    showScreen('rooms-screen');loadRooms();pingConn();
+    startGlobalListener();
+    requestNotifPermission();
+  }catch(e){setMsg(msg,'Error. Try again.',true);console.error(e);}
+  finally{btn.disabled=false;btn.textContent=authMode==='login'?'Sign In':'Create Account';}
+}
+function doLogout(){
+  if(realtimeSub){realtimeSub.unsubscribe();realtimeSub=null;}
+  stopGlobalListener();
+  sessClear();me=null;activeRoom=null;
+  byId('auth-username').value='';byId('auth-password').value='';byId('auth-confirm').value='';
+  byId('auth-msg').textContent='';byId('lockout-banner').style.display='none';
+  switchTab('login');showScreen('auth-screen');
+}
+function pwScore(pw){var s=0;if(pw.length>=8)s++;if(pw.length>=12)s++;if(/[0-9]/.test(pw))s++;if(/[^a-zA-Z0-9]/.test(pw))s++;if(/[A-Z]/.test(pw)&&/[a-z]/.test(pw))s++;return Math.min(s,4);}
+function updatePwStrength(){
+  if(authMode!=='signup')return;
+  var pw=byId('auth-password').value,s=pwScore(pw),fill=byId('pw-strength-fill');
+  fill.style.width=pw.length?['0%','25%','50%','75%','100%'][s]:'0%';
+  fill.style.background=['','#ff453a','#ff9f0a','#30d158','#0a84ff'][s]||'';
+}
+
+// ══ MESSAGE CACHE ══
+function cacheKey(rid){return CACHE_PFX+rid;}
+function cacheLoad(rid){try{return JSON.parse(localStorage.getItem(cacheKey(rid)))||[];}catch(e){return[];}}
+function cacheSave(rid,msgs){localStorage.setItem(cacheKey(rid),JSON.stringify(msgs));}
+function cacheAdd(rid,m){
+  var msgs=cacheLoad(rid);
+  if(!msgs.find(function(x){return x.id===m.id;})){msgs.push(m);if(msgs.length>500)msgs.splice(0,msgs.length-500);cacheSave(rid,msgs);}
+}
+function cacheClear(rid){localStorage.removeItem(cacheKey(rid));}
+
+// ══ IMAGE CACHE (stores blob data URLs keyed by message id) ══
+// Images are stored as base64 in localStorage so they survive offline/reload
+function imgCacheKey(rid){return IMG_CACHE_PFX+rid;}
+function imgCacheLoad(rid){try{return JSON.parse(localStorage.getItem(imgCacheKey(rid)))||{};}catch(e){return{};}}
+function imgCacheSave(rid,map){localStorage.setItem(imgCacheKey(rid),JSON.stringify(map));}
+function imgCacheSet(rid,msgId,dataUrl){var m=imgCacheLoad(rid);m[msgId]=dataUrl;imgCacheSave(rid,m);}
+function imgCacheGet(rid,msgId){return imgCacheLoad(rid)[msgId]||null;}
+function imgCacheClear(rid){localStorage.removeItem(imgCacheKey(rid));}
+
+// ══ IMAGE SELECT (message attach) ══
+// ══ IMAGE COMPRESSION ══
+// Resizes to max 1280px on longest side, re-encodes as JPEG at 82% quality.
+// Falls back cleanly if canvas is unavailable.
+// Returns: Promise<{ blob: Blob, dataUrl: string, originalSize, compressedSize }>
+function compressImage(file){
+  return new Promise(function(resolve,reject){
+    var MAX_DIM=1280;
+    var QUALITY=0.82;
+    var SKIP_BELOW=300*1024; // don't bother compressing images already <300KB
+
+    // If already small enough, just read as-is
+    if(file.size<=SKIP_BELOW){
+      var r=new FileReader();
+      r.onload=function(ev){
+        resolve({blob:file,dataUrl:ev.target.result,originalSize:file.size,compressedSize:file.size});
+      };
+      r.onerror=reject;
+      r.readAsDataURL(file);
+      return;
+    }
+
+    var img=new Image();
+    var objUrl=URL.createObjectURL(file);
+    img.onload=function(){
+      URL.revokeObjectURL(objUrl);
+      var w=img.naturalWidth, h=img.naturalHeight;
+
+      // Calculate new dimensions keeping aspect ratio
+      if(w>MAX_DIM||h>MAX_DIM){
+        if(w>=h){h=Math.round(h*(MAX_DIM/w));w=MAX_DIM;}
+        else{w=Math.round(w*(MAX_DIM/h));h=MAX_DIM;}
+      }
+
+      var canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      var ctx=canvas.getContext('2d');
+      // Use imageSmoothingQuality for better downscaling
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
+      ctx.drawImage(img,0,0,w,h);
+
+      canvas.toBlob(function(blob){
+        if(!blob){reject(new Error('Canvas toBlob failed'));return;}
+        var reader=new FileReader();
+        reader.onload=function(ev){
+          resolve({
+            blob:blob,
+            dataUrl:ev.target.result,
+            originalSize:file.size,
+            compressedSize:blob.size
+          });
+        };
+        reader.onerror=reject;
+        reader.readAsDataURL(blob);
+      },'image/jpeg',QUALITY);
+    };
+    img.onerror=function(){
+      URL.revokeObjectURL(objUrl);
+      reject(new Error('Image load failed'));
+    };
+    img.src=objUrl;
+  });
+}
+
+function handleImgSelect(e){
+  var file=e.target.files&&e.target.files[0];
+  if(!file)return;
+  if(file.size>MAX_IMG_BYTES){showToast('Image too large — max 5MB.');e.target.value='';return;}
+  clearPendingVid(); // can't have both
+  // Show preview immediately from raw file while compression runs in background
+  var rawReader=new FileReader();
+  rawReader.onload=function(ev){
+    byId('img-preview-thumb').src=ev.target.result;
+    byId('img-attach-wrap').classList.add('visible');
+  };
+  rawReader.readAsDataURL(file);
+  // Compress async — result stored in pendingImgFile/pendingImgDataUrl when ready
+  pendingImgFile=file; // temp: keep original in case compression is instant
+  pendingImgDataUrl=null;
+  pendingCompressing=true;
+  compressImage(file).then(function(result){
+    pendingImgFile=result.blob;
+    pendingImgDataUrl=result.dataUrl;
+    pendingCompressing=false;
+    // Update preview to compressed version (visually identical, smaller)
+    byId('img-preview-thumb').src=result.dataUrl;
+  }).catch(function(){
+    // Compression failed — fall back to original
+    pendingCompressing=false;
+    var r=new FileReader();
+    r.onload=function(ev){pendingImgDataUrl=ev.target.result;};
+    r.readAsDataURL(file);
+  });
+  e.target.value='';
+}
+function clearPendingImg(){
+  pendingImgFile=null;pendingImgDataUrl=null;
+  byId('img-attach-wrap').classList.remove('visible');
+  byId('img-preview-thumb').src='';
+}
+
+// ══ VIDEO SELECT / PREVIEW ══
+function handleVidSelect(e){
+  var file=e.target.files&&e.target.files[0];
+  if(!file)return;
+  if(file.size>MAX_VID_BYTES){showToast('Video too large — max 50MB.');e.target.value='';return;}
+  // Can't have both image and video pending
+  clearPendingImg();
+  pendingVidFile=file;
+  // Show thumbnail via object URL (no FileReader needed for video preview)
+  var objUrl=URL.createObjectURL(file);
+  pendingVidDataUrl=objUrl;
+  var thumb=byId('vid-preview-thumb');
+  thumb.src=objUrl;
+  thumb.load();
+  byId('vid-attach-wrap').classList.add('visible');
+  e.target.value='';
+}
+function clearPendingVid(){
+  if(pendingVidDataUrl&&pendingVidDataUrl.startsWith('blob:'))URL.revokeObjectURL(pendingVidDataUrl);
+  pendingVidFile=null;pendingVidDataUrl=null;
+  byId('vid-attach-wrap').classList.remove('visible');
+  var thumb=byId('vid-preview-thumb');
+  thumb.src='';thumb.load();
+}
+
+// ══ ROOM IMAGE SELECT ══
+function handleRoomImgSelect(e){
+  var file=e.target.files&&e.target.files[0];
+  if(!file)return;
+  if(file.size>1048576){showToast('Max 1MB for room photo.');return;}
+  // Compress to max 400px for room avatars
+  compressRoomImg(file).then(function(dataUrl){
+    roomImgDataUrl=dataUrl;
+    var prev=byId('room-img-preview');prev.innerHTML='';
+    var img=document.createElement('img');img.src=dataUrl;prev.appendChild(img);
+  }).catch(function(){
+    // fallback: read raw
+    var r=new FileReader();
+    r.onload=function(ev){
+      roomImgDataUrl=ev.target.result;
+      var prev=byId('room-img-preview');prev.innerHTML='';
+      var img=document.createElement('img');img.src=roomImgDataUrl;prev.appendChild(img);
+    };
+    r.readAsDataURL(file);
+  });
+  e.target.value='';
+}
+
+function compressRoomImg(file){
+  return new Promise(function(resolve,reject){
+    var img=new Image();
+    var objUrl=URL.createObjectURL(file);
+    img.onload=function(){
+      URL.revokeObjectURL(objUrl);
+      var MAX=400,w=img.naturalWidth,h=img.naturalHeight;
+      if(w>=h){h=Math.round(h*(MAX/w));w=MAX;}else{w=Math.round(w*(MAX/h));h=MAX;}
+      var canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      var ctx=canvas.getContext('2d');
+      ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+      ctx.drawImage(img,0,0,w,h);
+      resolve(canvas.toDataURL('image/jpeg',0.85));
+    };
+    img.onerror=function(){URL.revokeObjectURL(objUrl);reject();};
+    img.src=objUrl;
+  });
+}
+
+// ══ ROOMS ══
+// ══ GLOBAL BACKGROUND LISTENER ══
+// Listens to ALL rooms user is in — works even on home screen
+var myRoomIds=[];  // kept in sync so global sub knows which rooms are mine
+var unreadCounts={}; // roomId -> count of unseen messages
+var notifBannerTimer=null;
+
+async function startGlobalListener(){
+  if(globalSub){globalSub.unsubscribe();globalSub=null;}
+  // Fetch all room IDs for this user
+  var mem=await db.from('room_members').select('room_id').eq('user_id',me.id);
+  myRoomIds=(mem.data||[]).map(function(m){return m.room_id;});
+  if(!myRoomIds.length)return;
+
+  // Single channel listening to ALL messages across all rooms
+  globalSub=db.channel('global:'+me.id)
+    .on('postgres_changes',{
+      event:'INSERT',schema:'public',table:'messages'
+    },function(p){
+      var msg=p.new;
+      // Only handle rooms this user is in, and not their own messages
+      if(msg.user_id===me.id)return;
+      if(myRoomIds.indexOf(msg.room_id)===-1)return;
+
+      // If user is already viewing this exact room, let startRealtime handle it
+      if(activeRoom&&activeRoom.id===msg.room_id)return;
+
+      // Update room list preview + unread count
+      unreadCounts[msg.room_id]=(unreadCounts[msg.room_id]||0)+1;
+      cacheAdd(msg.room_id,msg);
+      refreshRoomPreview(msg.room_id,msg);
+
+      // Show in-app banner
+      showNotifBanner(msg);
+
+      // Native browser/OS notification
+      sendNativeNotif(msg);
+    })
+    .subscribe();
+}
+
+function stopGlobalListener(){
+  if(globalSub){globalSub.unsubscribe();globalSub=null;}
+  myRoomIds=[];unreadCounts={};
+}
+
+// Called after joining/leaving a room to keep myRoomIds fresh
+function globalListenerAddRoom(roomId){
+  if(myRoomIds.indexOf(roomId)===-1)myRoomIds.push(roomId);
+}
+
+function refreshRoomPreview(roomId,msg){
+  // Update the room item in the list without full reload
+  var list=byId('rooms-list');
+  var items=list.querySelectorAll('.room-item');
+  // Find item for this room and update preview text + badge
+  // Easiest: just reload rooms list if on home screen
+  var onHome=!byId('rooms-screen').classList.contains('slide-left')&&
+             !byId('rooms-screen').classList.contains('hidden');
+  if(onHome)loadRooms();
+}
+
+// ── IN-APP BANNER ──
+function showNotifBanner(msg){
+  // Look up room display name
+  var roomName=msg.username; // fallback to sender name for DMs
+  var av=msg.username.charAt(0).toUpperCase();
+  byId('notif-av').textContent=av;
+  byId('notif-name').textContent=msg.username;
+  byId('notif-msg').textContent=msg.msg_type==='video'?'🎬 sent a video':msg.msg_type==='image'?'📷 sent an image':msg.content;
+
+  var banner=byId('notif-banner');
+  // Store which room this banner is for so tap opens it
+  banner.dataset.roomId=msg.room_id;
+  banner.classList.add('show');
+  clearTimeout(notifBannerTimer);
+  notifBannerTimer=setTimeout(function(){banner.classList.remove('show');},4000);
+}
+
+// ── NATIVE NOTIFICATIONS ──
+function requestNotifPermission(){
+  if(!('Notification' in window))return;
+  if(Notification.permission==='default'){
+    Notification.requestPermission();
+  }
+}
+
+function sendNativeNotif(msg){
+  if(!('Notification' in window))return;
+  if(Notification.permission!=='granted')return;
+  // Don't fire if app is in foreground and visible
+  if(!document.hidden)return; // only when app is backgrounded/minimised
+  try{
+    var n=new Notification(msg.username,{
+      body:msg.msg_type==='video'?'🎬 sent a video':msg.msg_type==='image'?'📷 sent an image':msg.content,
+      icon:LOGO_SRC,
+      badge:LOGO_SRC,
+      tag:msg.room_id, // replaces previous notif from same room
+      renotify:true,
+      silent:false
+    });
+    n.onclick=function(){
+      window.focus();
+      n.close();
+    };
+  }catch(e){}
+}
+
+// Open a room by ID only — fetches room data first
+async function openRoomById(roomId){
+  try{
+    var r=await db.from('rooms').select('*').eq('id',roomId).single();
+    if(!r.data)return;
+    var room=r.data;
+    var isDm=room.name&&room.name.startsWith('DM:');
+    var displayName=room.name;
+    if(isDm){
+      try{
+        var names=JSON.parse(room.dm_display_names||'{}');
+        var other=Object.entries(names).filter(function(e){return e[0]!==me.id;}).map(function(e){return e[1];})[0];
+        if(other)displayName=other;
+      }catch(e){}
+    }
+    openRoom(room.id,displayName,room.image_url,room.created_by,isDm);
+  }catch(e){}
+}
+
+async function loadRooms(){
+  byId('username-display').textContent=me.username;
+  var mem=await db.from('room_members').select('room_id').eq('user_id',me.id);
+  if(!mem.data||!mem.data.length){byId('rooms-list').innerHTML=emptyHTML();return;}
+  var ids=mem.data.map(function(m){return m.room_id;});
+  var rr=await db.from('rooms').select('*').in('id',ids).order('created_at',{ascending:false});
+  var rooms=rr.data||[],previews={};
+  for(var i=0;i<rooms.length;i++){
+    var r=rooms[i];
+    var cached=cacheLoad(r.id);
+    if(cached.length){previews[r.id]=cached[cached.length-1];continue;}
+    var pm=await db.from('messages').select('content,username,created_at,msg_type').eq('room_id',r.id).order('created_at',{ascending:false}).limit(1);
+    if(pm.data&&pm.data.length)previews[r.id]=pm.data[0];
+  }
+  renderRooms(rooms,previews);
+}
+function renderRooms(rooms,previews){
+  var list=byId('rooms-list');
+  if(!rooms.length){list.innerHTML=emptyHTML();return;}
+  list.innerHTML='';
+  rooms.forEach(function(r){
+    // For DM rooms, show the other person's name
+    var displayName=r.name;
+    var isDm=r.name&&r.name.startsWith('DM:');
+    if(isDm){
+      // Try to parse dm_display_names
+      try{
+        var names=JSON.parse(r.dm_display_names||'{}');
+        var otherName=Object.entries(names).filter(function(e){return e[0]!==me.id;}).map(function(e){return e[1];})[0];
+        if(otherName)displayName=otherName;
+      }catch(e){displayName='Direct Message';}
+    }
+    var p=previews[r.id];
+    var previewTxt=p?(p.msg_type==='video'?'🎬 Video':p.msg_type==='image'?'📷 Image':escH(p.username+': '+p.content)):'No messages yet';
+    var time=p?fmtTime(p.created_at):'';
+    var avatarInner=r.image_url
+      ?'<img src="'+escH(r.image_url)+'" alt=""/>'
+      :isDm?'<span style="font-size:20px">👤</span>':'<span>'+roomEmoji(r.name)+'</span>';
+    var div=document.createElement('div');div.className='room-item';
+    // For DMs, show online dot using other member's ID from dm_display_names
+    var otherUid='';
+    if(isDm){try{var dn=JSON.parse(r.dm_display_names||'{}');otherUid=Object.keys(dn).find(function(k){return k!==me.id;})||'';}catch(e){}}
+    var dotHtml=isDm?('<div class="online-dot"'+(otherUid?' data-uid="'+otherUid+'"':'')+
+      (onlineUsers[otherUid]?' style="display:block"':'')+'></div>'):'';
+    var unread=unreadCounts[r.id]||0;
+    var badgeHtml=unread>0?'<div class="unread-badge">'+unread+'</div>':'';
+    div.innerHTML='<div class="room-av-wrap"><div class="room-avatar" style="'+(isDm?'border-radius:50%':'')+'">'+avatarInner+'</div>'+dotHtml+'</div>'+
+      '<div class="room-info"><div class="room-name">'+escH(displayName)+'</div>'+
+      '<div class="room-preview">'+previewTxt+'</div></div>'+
+      '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'+
+      '<div class="room-time">'+time+'</div>'+badgeHtml+'</div>';
+    div.addEventListener('click',function(){openRoom(r.id,displayName,r.image_url,r.created_by,isDm);});
+    list.appendChild(div);
+  });
+}
+function openCreateModal(){
+  roomImgDataUrl=null;byId('room-img-preview').innerHTML='📷';byId('room-img-input').value='';
+  byId('room-name-inp').value='';byId('room-err').textContent='';
+  openModal('modal-create');setTimeout(function(){byId('room-name-inp').focus();},300);
+}
+function openJoinModal(){
+  byId('join-inp').value='';byId('join-err').textContent='';
+  openModal('modal-join');setTimeout(function(){byId('join-inp').focus();},300);
+}
+async function doCreateRoom(){
+  var name=byId('room-name-inp').value.trim();
+  var err=byId('room-err'),btn=byId('btn-create-room');
+  if(!name){err.textContent='Enter a room name.';return;}
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';err.textContent='';
+  try{
+    var insertData={name:name,created_by:me.id};
+    if(roomImgDataUrl)insertData.image_url=roomImgDataUrl;
+    var r=await db.from('rooms').insert(insertData).select().single();
+    if(r.error)throw r.error;
+    await db.from('room_members').insert({room_id:r.data.id,user_id:me.id});
+    closeModal('modal-create');showToast('Room created! Share the Room ID.');
+    globalListenerAddRoom(r.data.id);
+    await loadRooms();openRoom(r.data.id,r.data.name,r.data.image_url,r.data.created_by);
+  }catch(e){err.textContent='Error: '+e.message;}
+  finally{btn.disabled=false;btn.textContent='Create Room';}
+}
+async function doJoinRoom(){
+  var roomId=byId('join-inp').value.trim(),err=byId('join-err');
+  if(!roomId){err.textContent='Paste a Room ID.';return;}
+  if(!/^[0-9a-f-]{36}$/.test(roomId)){err.textContent='Invalid Room ID.';return;}
+  try{
+    var r=await db.from('rooms').select('*').eq('id',roomId).maybeSingle();
+    if(!r.data){err.textContent='Room not found.';return;}
+    var ex=await db.from('room_members').select('*').eq('room_id',roomId).eq('user_id',me.id).maybeSingle();
+    if(ex.data){err.textContent='Already in this room.';return;}
+    await db.from('room_members').insert({room_id:roomId,user_id:me.id});
+    closeModal('modal-join');showToast('Joined '+r.data.name+'! 🎉');
+    globalListenerAddRoom(roomId);
+    await loadRooms();openRoom(r.data.id,r.data.name,r.data.image_url,r.data.created_by);
+  }catch(e){err.textContent='Error: '+e.message;}
+}
+
+// ══ CHAT ══
+async function openRoom(roomId,roomName,imageUrl,createdBy,isDm){
+  // Clear unread for this room
+  unreadCounts[roomId]=0;
+  activeRoom={id:roomId,name:roomName,imageUrl:imageUrl||null,createdBy:createdBy||null,isDm:!!isDm};
+  navPush('chat');
+  byId('chat-title').textContent=roomName;
+  byId('chat-sub').textContent='loading...';
+  byId('messages-area').innerHTML='<div class="system-msg">Loading...</div>';
+  byId('msg-input').value='';clearPendingImg();clearPendingVid();cancelReply();
+  byId('typing-indicator').classList.remove('visible');
+  var avEl=byId('chat-avatar-el');
+  avEl.innerHTML=imageUrl?'<img src="'+escH(imageUrl)+'" alt=""/>':(isDm?'👤':roomEmoji(roomName));
+  byId('rooms-screen').classList.add('slide-left');
+  byId('chat-screen').classList.remove('hidden');
+  await fetchMessages(roomId);
+  await fetchMemberCount(roomId);
+  startRealtime(roomId);
+  startPresence(roomId);
+  requestAnimationFrame(function(){var a=byId('messages-area');a.scrollTop=a.scrollHeight;});
+}
+
+async function fetchMessages(roomId){
+  var cached=cacheLoad(roomId);
+  var lastTime=cached.length?cached[cached.length-1].created_at:null;
+  var q=db.from('messages').select('*').eq('room_id',roomId).order('created_at',{ascending:true});
+  if(lastTime)q=q.gt('created_at',lastTime);
+  var res=await q.limit(300);
+  var fresh=res.data||[];
+
+  // Expire images older than 2 days that haven't been cached locally yet
+  var now=Date.now();
+  fresh.forEach(function(m){
+    if(m.msg_type==='image'){
+      var age=now-new Date(m.created_at).getTime();
+      // If image is older than TTL and not in local cache, mark as expired
+      if(age>IMG_TTL_MS&&!imgCacheGet(roomId,m.id)){
+        m.img_expired=true;
+      }
+    }
+    cacheAdd(roomId,m);
+  });
+
+  renderMessages(cacheLoad(roomId));
+  if(fresh.length)burnMessages(roomId,fresh);
+}
+
+async function burnMessages(roomId,msgs){
+  var memRes=await db.from('room_members').select('user_id').eq('room_id',roomId);
+  var memberIds=(memRes.data||[]).map(function(m){return m.user_id;});
+  for(var i=0;i<msgs.length;i++){
+    var m=msgs[i];
+    if(m.user_id===me.id)continue;
+    var readBy=Array.isArray(m.read_by)?m.read_by.slice():[];
+    if(readBy.indexOf(me.id)!==-1)continue;
+    readBy.push(me.id);
+
+    // Cache image locally before deletion (so burn-after-read shows it until they close)
+    if(m.msg_type==='image'&&m.image_path&&!imgCacheGet(roomId,m.id)){
+      await downloadAndCacheImage(roomId,m.id,m.image_path);
+    }
+    // Video: just ensure signed URL is cached in memory for current session
+    if(m.msg_type==='video'&&m.image_path&&!vidUrlCache[m.id]){
+      try{
+        var su=await db.storage.from(SUPA_BUCKET).createSignedUrl(m.image_path,3600);
+        if(su.data&&su.data.signedUrl)vidUrlCache[m.id]=su.data.signedUrl;
+      }catch(e){}
+    }
+
+    var nonSenders=memberIds.filter(function(uid){return uid!==m.user_id;});
+    var allRead=nonSenders.every(function(uid){return readBy.indexOf(uid)!==-1;});
+    if(allRead&&nonSenders.length>0){
+      // Delete message record. Image file deletion handled by DB trigger / scheduled cleanup.
+      await db.from('messages').delete().eq('id',m.id);
+      // Also delete the storage file
+      if(m.image_path){
+        await db.storage.from(SUPA_BUCKET).remove([m.image_path]);
+      }
+      // Clear from memory cache
+      if(m.msg_type==='video')delete vidUrlCache[m.id];
+    } else {
+      await db.from('messages').update({read_by:readBy}).eq('id',m.id);
+    }
+  }
+}
+
+// Download image from Supabase storage and cache as base64 locally
+async function downloadAndCacheImage(roomId,msgId,imagePath){
+  try{
+    var res=await db.storage.from(SUPA_BUCKET).download(imagePath);
+    if(res.error||!res.data)return;
+    var blob=res.data;
+    var reader=new FileReader();
+    reader.onload=function(ev){imgCacheSet(roomId,msgId,ev.target.result);};
+    reader.readAsDataURL(blob);
+  }catch(e){console.warn('Image cache failed',e);}
+}
+
+function buildMsgDiv(m, i, msgs){
+  var mine=m.user_id===me.id;
+  var showSender=!mine&&(i===0||msgs[i-1].user_id!==m.user_id);
+  var div=document.createElement('div');
+  div.className='msg-row '+(mine?'mine':'theirs');
+  var avatarHtml=!mine?'<div class="msg-avatar">'+m.username.charAt(0).toUpperCase()+'</div>':'';
+  var senderHtml=showSender?'<div class="msg-sender">'+escH(m.username)+'</div>':'';
+  // Reply quote
+  var quoteHtml='';
+  if(m.reply_to_content){
+    quoteHtml='<div class="reply-quote">'+escH(m.reply_to_username||'')+': '+escH(m.reply_to_content)+'</div>';
+  }
+  // Content
+  var contentHtml;
+  if(m.msg_type==='video'){
+    contentHtml=quoteHtml+buildVideoBubble(m,mine);
+  } else if(m.msg_type==='image'){
+    contentHtml=quoteHtml+buildImageBubble(m,mine);
+  } else {
+    var txt=escH(m.content);
+    // Linkify
+    txt=txt.replace(/https?:\/\/[^\s&lt;&gt;"]+/g,function(url){
+      return '<a href="'+url+'" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;text-underline-offset:2px" onclick="event.stopPropagation()">'+url+'</a>';
+    });
+    contentHtml='<div class="bubble">'+quoteHtml+txt+'</div>';
+  }
+  // Ticks for sent messages
+  var ticksHtml='';
+  if(mine&&m.msg_type==='text'){
+    var readBy=Array.isArray(m.read_by)?m.read_by:[];
+    var tick=readBy.length>1?'✓✓':'✓';
+    var cls=readBy.length>1?'read':'delivered';
+    ticksHtml='<span class="msg-ticks '+cls+'">'+tick+'</span>';
+  }
+  div.innerHTML=avatarHtml+'<div class="msg-group">'+senderHtml+contentHtml+
+    '<div class="msg-time">'+fmtTime(m.created_at)+ticksHtml+'</div></div>';
+  // Long-press / right-click to reply
+  var pressTimer;
+  div.addEventListener('touchstart',function(){pressTimer=setTimeout(function(){setReply(m);},500);},{passive:true});
+  div.addEventListener('touchend',function(){clearTimeout(pressTimer);});
+  div.addEventListener('touchmove',function(){clearTimeout(pressTimer);},{passive:true});
+  div.addEventListener('contextmenu',function(e){e.preventDefault();setReply(m);});
+  // Image lightbox
+  if(m.msg_type==='image'){
+    var imgWrap=div.querySelector('.img-bubble');
+    if(imgWrap)imgWrap.addEventListener('click',function(){openLightbox(m.id);});
+  }
+  // Video tap — play/pause
+  if(m.msg_type==='video'){
+    var vidBubble=div.querySelector('.vid-bubble');
+    if(vidBubble)attachVideoTap(vidBubble,m.id);
+  }
+  // Link preview (text only, not mine to avoid clutter)
+  if(m.msg_type==='text'&&!mine){
+    var url=extractUrl(m.content);
+    if(url){
+      var previewContainer=document.createElement('div');
+      previewContainer.className='link-preview-wrap';
+      var bubble=div.querySelector('.bubble');
+      if(bubble){bubble.appendChild(previewContainer);renderLinkPreview(url,previewContainer);}
+    }
+  }
+  return div;
+}
+
+function renderMessages(msgs){
+  var area=byId('messages-area');
+  if(!msgs.length){area.innerHTML='<div class="system-msg">No messages yet — say hello! 👋</div>';return;}
+  area.innerHTML='';
+  msgs.forEach(function(m,i){
+    area.appendChild(buildMsgDiv(m,i,msgs));
+  });
+  area.scrollTop=area.scrollHeight;
+}
+
+function buildImageBubble(m,mine){
+  var cached=imgCacheGet(activeRoom.id,m.id);
+  var wm=mine?'':('<div class="wm">'+escH(me.username)+'</div>');
+  if(m.img_expired||(!cached&&!m.image_path)){
+    // Expired / unavailable
+    return '<div class="bubble img-bubble" style="cursor:default;opacity:.5">'+
+      '<div class="img-uploading"><span style="font-size:22px">🕓</span><span style="font-size:12px;color:var(--text3)">Image expired</span></div></div>';
+  }
+  if(cached){
+    return '<div class="bubble img-bubble" data-msgid="'+m.id+'">'+
+      '<img src="'+cached+'" alt="Image" draggable="false"/>'+wm+'</div>';
+  }
+  // Not yet cached — show placeholder, load async
+  var placeholderId='img-ph-'+m.id;
+  setTimeout(function(){loadImageIntoMessage(m);},50);
+  return '<div class="bubble img-bubble" data-msgid="'+m.id+'">'+
+    '<div class="img-uploading" id="'+placeholderId+'">'+
+    '<div class="spinner"></div><span style="font-size:12px;color:var(--text3)">Loading…</span></div></div>';
+}
+
+async function loadImageIntoMessage(m){
+  var imgWrap=document.querySelector('[data-msgid="'+m.id+'"]');
+  if(!imgWrap)return;
+  // Try to get signed URL
+  try{
+    var su=await db.storage.from(SUPA_BUCKET).createSignedUrl(m.image_path,3600);
+    if(su.error||!su.data)throw su.error;
+    var url=su.data.signedUrl;
+    // Fetch as blob to avoid caching in browser disk cache
+    var resp=await fetch(url);
+    var blob=await resp.blob();
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var dataUrl=ev.target.result;
+      imgCacheSet(activeRoom.id,m.id,dataUrl);
+      var mine=m.user_id===me.id;
+      var wm=mine?'':('<div class="wm">'+escH(me.username)+'</div>');
+      imgWrap.innerHTML='<img src="'+dataUrl+'" alt="Image" draggable="false"/>'+wm;
+    };
+    reader.readAsDataURL(blob);
+  }catch(e){
+    var ph=document.getElementById('img-ph-'+m.id);
+    if(ph)ph.innerHTML='<span style="font-size:12px;color:var(--text3)">Failed to load</span>';
+  }
+}
+
+// ── Lightbox ──
+function openLightbox(msgId){
+  var src=imgCacheGet(activeRoom.id,msgId);
+  if(!src)return;
+  byId('lightbox-img').src=src;
+  byId('lightbox-wm').textContent='FLASH · '+me.username+' · private';
+  byId('lightbox').classList.add('open');
+}
+function closeLightbox(){
+  byId('lightbox').classList.remove('open');
+  byId('lightbox-img').src='';
+}
+
+function appendIncoming(m){
+  var area=byId('messages-area');
+  var sys=area.querySelector('.system-msg');if(sys)sys.remove();
+  cacheAdd(activeRoom.id,m);
+  var msgs=cacheLoad(activeRoom.id);
+  var idx=msgs.findIndex(function(x){return x.id===m.id;});
+  area.appendChild(buildMsgDiv(m,idx,msgs));
+  area.scrollTop=area.scrollHeight;
+  burnMessages(activeRoom.id,[m]);
+}
+
+function startRealtime(roomId){
+  if(realtimeSub)realtimeSub.unsubscribe();
+  realtimeSub=db.channel('room:'+roomId)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'room_id=eq.'+roomId},
+      function(p){if(p.new.user_id!==me.id)appendIncoming(p.new);})
+    .on('broadcast',{event:'typing'},function(p){
+      if(p.payload&&p.payload.userId!==me.id&&activeRoom&&activeRoom.id===roomId){
+        showTyping(p.payload.username);
+      }
+    })
+    .subscribe();
+}
+
+// ══ PRESENCE (online dots) ══
+function startPresence(roomId){
+  if(presenceSub)presenceSub.unsubscribe();
+  onlineUsers={};
+  presenceSub=db.channel('presence:'+roomId,{config:{presence:{key:me.id}}})
+    .on('presence',{event:'sync'},function(){
+      var state=presenceSub.presenceState();
+      onlineUsers={};
+      Object.keys(state).forEach(function(k){onlineUsers[k]=true;});
+      updatePresenceDots();
+    })
+    .on('presence',{event:'join'},function(p){
+      onlineUsers[p.key]=true;updatePresenceDots();
+    })
+    .on('presence',{event:'leave'},function(p){
+      delete onlineUsers[p.key];updatePresenceDots();
+    })
+    .subscribe(function(status){
+      if(status==='SUBSCRIBED')presenceSub.track({userId:me.id,username:me.username,online:true});
+    });
+}
+function updatePresenceDots(){
+  // Update room list dots
+  document.querySelectorAll('.online-dot[data-uid]').forEach(function(dot){
+    dot.classList.toggle('visible',!!onlineUsers[dot.dataset.uid]);
+  });
+}
+
+// ══ TYPING ══
+var typingHideTimer=null;
+function sendTyping(){
+  if(!activeRoom||!realtimeSub)return;
+  realtimeSub.send({type:'broadcast',event:'typing',payload:{userId:me.id,username:me.username}});
+  clearTimeout(typingTimer);
+  typingTimer=setTimeout(stopTyping,3000);
+}
+function stopTyping(){clearTimeout(typingTimer);typingTimer=null;}
+function showTyping(username){
+  var ind=byId('typing-indicator');
+  byId('typing-text').textContent=username+' is typing…';
+  ind.classList.add('visible');
+  clearTimeout(typingHideTimer);
+  typingHideTimer=setTimeout(function(){ind.classList.remove('visible');},3000);
+}
+
+// ══ REPLY ══
+function setReply(m){
+  replyTo={id:m.id,username:m.username,content:m.msg_type==='video'?'🎬 Video':m.msg_type==='image'?'📷 Image':m.content};
+  byId('reply-bar-text').textContent=replyTo.username+': '+replyTo.content;
+  byId('reply-bar').classList.add('visible');
+  byId('msg-input').focus();
+}
+function cancelReply(){
+  replyTo=null;
+  byId('reply-bar').classList.remove('visible');
+  byId('reply-bar-text').textContent='';
+}
+
+async function fetchMemberCount(roomId){
+  if(activeRoom&&activeRoom.isDm){
+    byId('chat-sub').textContent='🔒 end-to-end encrypted · burn-after-read';
+    return;
+  }
+  var r=await db.from('room_members').select('*',{count:'exact',head:true}).eq('room_id',roomId);
+  var c=r.count||0;
+  byId('chat-sub').textContent=c+' member'+(c!==1?'s':'')+' · 🔥 burn-after-read';
+}
+
+// ══ LINK PREVIEW ══
+var linkCache={};
+function extractUrl(text){
+  var m=text.match(/https?:\/\/[^\s]+/);
+  return m?m[0]:null;
+}
+function renderLinkPreview(url,container){
+  if(linkCache[url]===false)return; // known bad
+  if(linkCache[url]){injectPreview(linkCache[url],container);return;}
+  // Use microlink.io free API for metadata
+  fetch('https://api.microlink.io/?url='+encodeURIComponent(url)+'&screenshot=false')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(!d||d.status!=='success'){linkCache[url]=false;return;}
+      linkCache[url]=d.data;
+      injectPreview(d.data,container);
+    })
+    .catch(function(){linkCache[url]=false;});
+}
+function injectPreview(data,container){
+  if(!data||!container)return;
+  var title=data.title||'';
+  var imgUrl=(data.image&&data.image.url)||'';
+  var urlHost=data.url?new URL(data.url).hostname:'';
+  var html='<a class="link-preview" href="'+escH(data.url||'')+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">';
+  if(imgUrl)html+='<img class="link-preview-img" src="'+escH(imgUrl)+'" alt="" onerror="this.style.display=\'none\'"/>';
+  html+='<div class="link-preview-body"><div class="link-preview-title">'+escH(title)+'</div>';
+  html+='<div class="link-preview-url">'+escH(urlHost)+'</div></div></a>';
+  container.innerHTML=html;
+}
+
+
+
+// ══ SEND MESSAGE (text + image) ══
+async function sendMsg(){
+  var inp=byId('msg-input');
+  var txt=inp.value.trim();
+  var hasImg=!!pendingImgFile;
+  var hasVid=!!pendingVidFile;
+  if(!txt&&!hasImg&&!hasVid)return;
+  if(!activeRoom)return;
+  if(txt.length>4000){showToast('Message too long.');return;}
+  if(hasImg&&pendingCompressing){showToast('⏳ Still compressing, please wait…');return;}
+  if(hasImg&&!pendingImgDataUrl){showToast('⏳ Image not ready yet.');return;}
+
+  if(hasVid){
+    await sendVideoMessage(txt);
+  } else if(hasImg){
+    await sendImageMessage(txt);
+  } else {
+    inp.value='';inp.style.height='auto';
+    await sendTextMessage(txt);
+  }
+}
+
+async function sendTextMessage(txt){
+  var area=byId('messages-area');
+  var sys=area.querySelector('.system-msg');if(sys)sys.remove();
+  var rTo=replyTo; cancelReply();
+  var insertData={room_id:activeRoom.id,user_id:me.id,username:me.username,content:txt,msg_type:'text',read_by:[]};
+  if(rTo){insertData.reply_to_id=rTo.id;insertData.reply_to_username=rTo.username;insertData.reply_to_content=rTo.content;}
+  var tmp=Object.assign({id:'tmp_'+Date.now(),created_at:new Date().toISOString()},insertData);
+  cacheAdd(activeRoom.id,tmp);
+  var msgs=cacheLoad(activeRoom.id);
+  var idx=msgs.findIndex(function(m){return m.id===tmp.id;});
+  area.appendChild(buildMsgDiv(tmp,idx,msgs));
+  area.scrollTop=area.scrollHeight;
+  try{
+    var res=await db.from('messages').insert(insertData).select().single();
+    if(res.error)throw res.error;
+    var cached=cacheLoad(activeRoom.id);
+    var ci=cached.findIndex(function(m){return m.id===tmp.id;});
+    if(ci!==-1){cached[ci]=res.data;cacheSave(activeRoom.id,cached);}
+  }catch(e){showToast('Failed to send.');}
+}
+
+async function sendImageMessage(caption){
+  var file=pendingImgFile;
+  var dataUrl=pendingImgDataUrl;
+  clearPendingImg();
+  byId('msg-input').value='';byId('msg-input').style.height='auto';
+
+  // Optimistic UI — show uploading state
+  var area=byId('messages-area');
+  var sys=area.querySelector('.system-msg');if(sys)sys.remove();
+  var tmpId='tmp_img_'+Date.now();
+  var div=document.createElement('div');div.className='msg-row mine';
+  div.id='msg-upload-'+tmpId;
+  div.innerHTML='<div class="msg-group">'+
+    '<div class="bubble img-bubble"><div class="img-uploading">'+
+    '<div class="upload-bar"><div class="upload-bar-fill" id="upbar-'+tmpId+'" style="width:5%"></div></div>'+
+    '<span class="upload-label" id="uplabel-'+tmpId+'" style="font-size:12px;color:var(--text3)">Uploading…</span></div></div>'+
+    '<div class="msg-time">now</div></div>';
+  area.appendChild(div);area.scrollTop=area.scrollHeight;
+
+  try{
+    var bar=byId('upbar-'+tmpId);
+    var label=byId('uplabel-'+tmpId);
+    var setBar=function(pct,txt){if(bar)bar.style.width=pct+'%';if(label)label.textContent=txt;};
+
+    // Upload to Supabase Storage (already compressed — just upload the blob)
+    setBar(20,'Uploading…');
+    var ext='jpg'; // always jpeg after compression
+    var path='rooms/'+activeRoom.id+'/'+Date.now()+'_'+me.id+'.'+ext;
+
+    // Upload compressed blob
+    var upRes=await db.storage.from(SUPA_BUCKET).upload(path,file,{
+      contentType:'image/jpeg',upsert:false
+    });
+    setBar(80,'Saving…');
+    if(upRes.error)throw upRes.error;
+
+    // Insert message record with image_path + expiry timestamp
+    var expiresAt=new Date(Date.now()+IMG_TTL_MS).toISOString();
+    var ins=await db.from('messages').insert({
+      room_id:activeRoom.id,user_id:me.id,username:me.username,
+      content:caption||'',msg_type:'image',
+      image_path:path,expires_at:expiresAt,
+      read_by:[me.id]  // sender has "seen" it
+    }).select().single();
+    if(ins.error)throw ins.error;
+    setBar(100,'Done ✓');
+
+    // Cache the image locally for sender too
+    imgCacheSet(activeRoom.id,ins.data.id,dataUrl);
+    // Cache the message
+    var cachedMsg=Object.assign({},ins.data);
+    cacheAdd(activeRoom.id,cachedMsg);
+
+    // Replace uploading UI with actual image
+    var msgDiv=byId('msg-upload-'+tmpId);
+    if(msgDiv){
+      var wm=''; // sender doesn't get their own watermark
+      msgDiv.querySelector('.msg-group').innerHTML=
+        '<div class="bubble img-bubble" data-msgid="'+ins.data.id+'">'+
+        '<img src="'+dataUrl+'" alt="Image" draggable="false"/>'+wm+'</div>'+
+        '<div class="msg-time">now</div>';
+      msgDiv.querySelector('.img-bubble').addEventListener('click',function(){openLightbox(ins.data.id);});
+    }
+
+  }catch(e){
+    showToast('Image upload failed: '+e.message);
+    var msgDiv=byId('msg-upload-'+tmpId);
+    if(msgDiv)msgDiv.remove();
+  }
+}
+
+// ══ SEND VIDEO ══
+async function sendVideoMessage(caption){
+  var file=pendingVidFile;
+  clearPendingVid();
+  byId('msg-input').value='';byId('msg-input').style.height='auto';
+
+  var area=byId('messages-area');
+  var sys=area.querySelector('.system-msg');if(sys)sys.remove();
+  var tmpId='tmp_vid_'+Date.now();
+  var div=document.createElement('div');div.className='msg-row mine';
+  div.id='msg-upload-'+tmpId;
+  div.innerHTML='<div class="msg-group">'+
+    '<div class="bubble img-bubble"><div class="img-uploading">'+
+    '<div class="upload-bar"><div class="upload-bar-fill" id="upbar-'+tmpId+'" style="width:5%"></div></div>'+
+    '<span class="upload-label" id="uplabel-'+tmpId+'" style="font-size:12px;color:var(--text3)">Uploading video…</span>'+
+    '</div></div><div class="msg-time">now</div></div>';
+  area.appendChild(div);area.scrollTop=area.scrollHeight;
+
+  try{
+    var bar=byId('upbar-'+tmpId);
+    var label=byId('uplabel-'+tmpId);
+    var setBar=function(pct,txt){if(bar)bar.style.width=pct+'%';if(label)label.textContent=txt;};
+
+    setBar(20,'Uploading video…');
+    var ext=file.name.split('.').pop().toLowerCase()||'mp4';
+    var path='rooms/'+activeRoom.id+'/vid_'+Date.now()+'_'+me.id+'.'+ext;
+
+    var upRes=await db.storage.from(SUPA_BUCKET).upload(path,file,{
+      contentType:file.type||'video/mp4',upsert:false
+    });
+    setBar(85,'Saving…');
+    if(upRes.error)throw upRes.error;
+
+    var expiresAt=new Date(Date.now()+IMG_TTL_MS).toISOString();
+    var ins=await db.from('messages').insert({
+      room_id:activeRoom.id,user_id:me.id,username:me.username,
+      content:caption||'',msg_type:'video',
+      image_path:path,expires_at:expiresAt,
+      read_by:[me.id]
+    }).select().single();
+    if(ins.error)throw ins.error;
+    setBar(100,'Done ✓');
+
+    // Get a signed URL for immediate playback by sender
+    var su=await db.storage.from(SUPA_BUCKET).createSignedUrl(path,3600);
+    if(su.data&&su.data.signedUrl){
+      vidUrlCache[ins.data.id]=su.data.signedUrl;
+    }
+    cacheAdd(activeRoom.id,ins.data);
+
+    // Replace uploading UI with actual video bubble
+    var msgDiv=byId('msg-upload-'+tmpId);
+    if(msgDiv){
+      var playId='vp-'+ins.data.id;
+      msgDiv.querySelector('.msg-group').innerHTML=
+        buildVideoBubbleHtml(ins.data.id,vidUrlCache[ins.data.id]||'')+
+        '<div class="msg-time">now</div>';
+      attachVideoTap(msgDiv.querySelector('.vid-bubble'),ins.data.id);
+    }
+
+  }catch(e){
+    showToast('Video upload failed: '+e.message);
+    var msgDiv=byId('msg-upload-'+tmpId);
+    if(msgDiv)msgDiv.remove();
+  }
+}
+
+// Build video bubble HTML (used by buildMsgDiv and sendVideoMessage)
+function buildVideoBubble(m,mine){
+  if(m.vid_expired||(!m.image_path)){
+    return '<div class="bubble img-bubble" style="cursor:default">'+
+      '<div class="vid-expired"><span style="font-size:24px">🎬</span>'+
+      '<span style="font-size:12px;color:var(--text3)">Video expired</span></div></div>';
+  }
+  // Check memory cache for signed URL
+  var url=vidUrlCache[m.id]||'';
+  if(!url){
+    // Trigger async load; show placeholder
+    loadVideoUrl(m);
+    return '<div class="bubble img-bubble" data-vid-msgid="'+m.id+'">'+
+      '<div class="img-uploading" id="vid-ph-'+m.id+'">'+
+      '<div class="spinner"></div>'+
+      '<span style="font-size:12px;color:var(--text3)">Loading…</span></div></div>';
+  }
+  return '<div class="bubble img-bubble">'+buildVideoBubbleHtml(m.id,url)+'</div>';
+}
+
+function buildVideoBubbleHtml(msgId,url){
+  return '<div class="vid-bubble" id="vb-'+msgId+'" data-vid-msgid="'+msgId+'">'+
+    '<video src="'+(url||'')+'" preload="metadata" playsinline muted '+
+    'controlslist="nodownload nofullscreen" disablepictureinpicture></video>'+
+    '<div class="vid-play-btn">'+
+    '<svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="24" fill="rgba(0,0,0,.45)"/>'+
+    '<polygon points="19,14 38,24 19,34" fill="white"/></svg>'+
+    '</div></div>';
+}
+
+async function loadVideoUrl(m){
+  try{
+    var su=await db.storage.from(SUPA_BUCKET).createSignedUrl(m.image_path,3600);
+    if(su.error||!su.data)throw su.error;
+    vidUrlCache[m.id]=su.data.signedUrl;
+    // Replace placeholder with video
+    var ph=document.getElementById('vid-ph-'+m.id);
+    var wrap=document.querySelector('[data-vid-msgid="'+m.id+'"]');
+    if(wrap){
+      wrap.innerHTML=buildVideoBubbleHtml(m.id,su.data.signedUrl);
+      attachVideoTap(wrap.querySelector('.vid-bubble'),m.id);
+    }
+  }catch(e){
+    var ph=document.getElementById('vid-ph-'+m.id);
+    if(ph)ph.innerHTML='<span style="font-size:12px;color:var(--text3)">Failed to load</span>';
+  }
+}
+
+// Tap on video bubble: toggle play/pause
+function attachVideoTap(bubbleEl,msgId){
+  if(!bubbleEl)return;
+  bubbleEl.addEventListener('click',function(e){
+    var vid=bubbleEl.querySelector('video');
+    if(!vid)return;
+    // Enable controls on first tap so user can seek/unmute
+    vid.controls=true;
+    vid.muted=false;
+    if(vid.paused){
+      vid.play().catch(function(){});
+      bubbleEl.classList.add('playing');
+    } else {
+      vid.pause();
+      bubbleEl.classList.remove('playing');
+    }
+    vid.onended=function(){bubbleEl.classList.remove('playing');};
+  });
+}
+
+// ══ DM / USER SEARCH ══
+function openDmScreen(){
+  byId('dm-search-inp').value='';
+  byId('dm-results').innerHTML=dmEmptyHTML();
+  byId('rooms-screen').classList.add('slide-left');
+  byId('dm-screen').classList.remove('hidden');
+  navPush('dm');
+  setTimeout(function(){byId('dm-search-inp').focus();},300);
+}
+function closeDmScreen(){
+  byId('rooms-screen').classList.remove('slide-left');
+  byId('dm-screen').classList.add('hidden');
+}
+async function doDmSearch(){
+  var q=byId('dm-search-inp').value.trim().toLowerCase();
+  var res=byId('dm-results');
+  if(!q){res.innerHTML=dmEmptyHTML();return;}
+  res.innerHTML='<div class="dm-empty"><div class="spinner"></div></div>';
+  try{
+    // Exact username match only — for privacy
+    var r=await db.from('users').select('id,username').eq('username',q).neq('id',me.id).limit(1);
+    var users=r.data||[];
+    if(!users.length){
+      res.innerHTML='<div class="dm-empty"><span style="font-size:40px;opacity:.3">👤</span>'+
+        '<span style="font-size:14px;color:var(--text3)">No user found with that exact username.</span>'+
+        '<span style="font-size:12px;color:var(--text3);opacity:.7">Usernames are case-sensitive.</span></div>';
+      return;
+    }
+    res.innerHTML='';
+    users.forEach(function(u){
+      var div=document.createElement('div');
+      div.className='search-result-item';
+      div.innerHTML=
+        '<div class="user-av">'+u.username.charAt(0).toUpperCase()+'</div>'+
+        '<div><div class="user-name">'+escH(u.username)+'</div>'+
+        '<div class="user-sub">Tap to send a direct message</div></div>';
+      div.addEventListener('click',function(){startDm(u);});
+      res.appendChild(div);
+    });
+  }catch(e){res.innerHTML='<div class="dm-empty"><span style="font-size:14px;color:var(--danger)">Search failed. Try again.</span></div>';}
+}
+
+async function startDm(user){
+  // DM rooms are named with both user IDs sorted so they're always the same room
+  var dmName='DM:'+[me.id,user.id].sort().join(':');
+  // Check if DM room already exists
+  var existing=await db.from('rooms').select('*').eq('name',dmName).maybeSingle();
+  var room=existing.data;
+  if(!room){
+    // Create DM room
+    var r=await db.from('rooms').insert({name:dmName,created_by:me.id,is_dm:true,dm_display_names:JSON.stringify({[me.id]:me.username,[user.id]:user.username})}).select().single();
+    if(r.error){showToast('Could not start DM.');return;}
+    room=r.data;
+    // Add both members
+    await db.from('room_members').insert([{room_id:room.id,user_id:me.id},{room_id:room.id,user_id:user.id}]);
+  } else {
+    // Make sure we're a member
+    var ex=await db.from('room_members').select('*').eq('room_id',room.id).eq('user_id',me.id).maybeSingle();
+    if(!ex.data)await db.from('room_members').insert({room_id:room.id,user_id:me.id});
+  }
+  closeDmScreen();
+  // Display name = the OTHER person's username
+  openRoom(room.id,user.username,null,room.created_by,true);
+}
+
+function dmEmptyHTML(){
+  return '<div class="dm-empty"><span style="font-size:44px;opacity:.3">💬</span>'+
+    '<span style="font-size:15px;font-weight:600;color:var(--text2)">New Message</span>'+
+    '<span style="font-size:14px">Type the exact username and tap Search</span></div>';
+}
+function debounce(fn,ms){var t;return function(){clearTimeout(t);t=setTimeout(fn,ms);};}
+
+function goBack(){
+  if(realtimeSub){realtimeSub.unsubscribe();realtimeSub=null;}
+  if(presenceSub){presenceSub.unsubscribe();presenceSub=null;}
+  stopTyping();cancelReply();clearPendingVid();
+  byId('typing-indicator').classList.remove('visible');
+  byId('rooms-screen').classList.remove('slide-left');
+  byId('chat-screen').classList.add('hidden');
+  clearPendingImg();activeRoom=null;loadRooms();
+}
+
+// ══ ROOM OPTIONS ══
+async function showRoomOptions(){
+  if(!activeRoom)return;
+
+  if(activeRoom.isDm){
+    // DM options — totally different, minimal sheet
+    byId('opt-room-title').textContent=activeRoom.name;
+    // Hide room-specific elements
+    byId('opt-room-id').parentElement&&(byId('opt-room-id').closest('.modal-sub')||null);
+    byId('opt-leave-room').style.display='none';
+    byId('opt-delete-room').style.display='none';
+    byId('opt-members-list').innerHTML='';
+    // Hide room-id section entirely for DM
+    byId('dm-id-section').style.display='none';
+    byId('dm-members-section').style.display='none';
+    byId('dm-divider1').style.display='none';
+    byId('dm-divider2').style.display='none';
+    byId('opt-clear-chats').style.display='flex';
+    byId('opt-block-user').style.display='flex';
+    openModal('modal-room-options');
+    return;
+  }
+
+  // Normal room options
+  byId('dm-id-section').style.display='';
+  byId('dm-members-section').style.display='';
+  byId('dm-divider1').style.display='';
+  byId('dm-divider2').style.display='';
+  byId('opt-block-user').style.display='none';
+  byId('opt-leave-room').style.display='flex';
+  byId('opt-clear-chats').style.display='flex';
+  byId('opt-room-title').textContent=activeRoom.name;
+  var idEl=byId('opt-room-id');
+  idEl.childNodes[0]?idEl.childNodes[0].textContent=activeRoom.id+' ':idEl.insertBefore(document.createTextNode(activeRoom.id+' '),idEl.firstChild);
+  byId('opt-delete-room').style.display=activeRoom.createdBy===me.id?'flex':'none';
+  var mRes=await db.from('room_members').select('user_id').eq('room_id',activeRoom.id);
+  var uids=(mRes.data||[]).map(function(m){return m.user_id;});
+  var uRes=await db.from('users').select('id,username').in('id',uids);
+  var ml=byId('opt-members-list');ml.innerHTML='';
+  (uRes.data||[]).forEach(function(u){
+    var row=document.createElement('div');row.className='member-row';
+    row.innerHTML='<div class="member-av">'+u.username.charAt(0).toUpperCase()+'</div>'+
+      '<span style="font-size:15px;flex:1">'+escH(u.username)+'</span>'+
+      (u.id===me.id?'<span style="font-size:11px;color:var(--accent)">you</span>':'');
+    ml.appendChild(row);
+  });
+  openModal('modal-room-options');
+}
+
+async function doLeaveRoom(){
+  if(!activeRoom)return;
+  try{
+    await db.from('room_members').delete().eq('room_id',activeRoom.id).eq('user_id',me.id);
+    cacheClear(activeRoom.id);imgCacheClear(activeRoom.id);
+    closeModal('modal-room-options');goBack();showToast('Left the room.');
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+async function doDeleteDm(){
+  if(!activeRoom)return;
+  try{
+    // Just remove yourself from the DM room membership + clear local cache
+    await db.from('room_members').delete().eq('room_id',activeRoom.id).eq('user_id',me.id);
+    cacheClear(activeRoom.id);imgCacheClear(activeRoom.id);
+    closeModal('modal-room-options');goBack();showToast('Conversation deleted.');
+  }catch(e){showToast('Error: '+e.message);}
+}
+
+async function doDeleteRoom(){
+  if(!activeRoom||activeRoom.createdBy!==me.id){showToast('Only the creator can delete this room.');return;}
+  try{
+    // Delete all images from storage for this room
+    var imgs=await db.from('messages').select('image_path').eq('room_id',activeRoom.id).eq('msg_type','image');
+    var paths=(imgs.data||[]).map(function(m){return m.image_path;}).filter(Boolean);
+    if(paths.length)await db.storage.from(SUPA_BUCKET).remove(paths);
+    // Delete messages, members, room
+    await db.from('messages').delete().eq('room_id',activeRoom.id);
+    await db.from('room_members').delete().eq('room_id',activeRoom.id);
+    await db.from('rooms').delete().eq('id',activeRoom.id);
+    cacheClear(activeRoom.id);imgCacheClear(activeRoom.id);
+    closeModal('modal-room-options');goBack();showToast('Room deleted for everyone.');
+  }catch(e){showToast('Delete error: '+e.message);}
+}
+
+// ══ CONFIRM ══
+function showConfirm(title,body,onOk){
+  byId('confirm-title').textContent=title;byId('confirm-body').textContent=body;
+  pendingConfirm=onOk;openModal('modal-confirm');
+}
+function openModal(id){byId(id).classList.add('open');}
+function closeModal(id){byId(id).classList.remove('open');}
+
+// ══ UTILS ══
+function showScreen(id){document.querySelectorAll('.screen').forEach(function(s){s.classList.toggle('hidden',s.id!==id);s.classList.remove('slide-left');});}
+function setMsg(el,txt,isErr){el.textContent=txt;el.className='auth-msg '+(isErr?'err':'ok');}
+function showToast(msg){var t=byId('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3200);}
+function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtTime(iso){var d=new Date(iso),now=new Date(),diff=now-d;if(diff<60000)return'now';if(diff<3600000)return Math.floor(diff/60000)+'m';if(diff<86400000)return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});return d.toLocaleDateString([],{month:'short',day:'numeric'});}
+function roomEmoji(n){n=n.toLowerCase();if(n.includes('family'))return'🏠';if(n.includes('work')||n.includes('office'))return'💼';if(n.includes('game'))return'🎮';if(n.includes('music'))return'🎵';if(n.includes('food')||n.includes('eat'))return'🍕';if(n.includes('sport')||n.includes('gym'))return'⚽';return'💬';}
+function clip(txt){navigator.clipboard.writeText(txt).catch(function(){});}
+function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';}
+function emptyHTML(){return'<div class="empty-state"><div class="empty-icon">💬</div><div class="empty-title">No chats yet</div><div class="empty-body">Tap ✏️ to create a room or 🔗 to join one.</div></div>';}
+async function pingConn(){var dot=byId('conn-dot');try{var r=await db.from('users').select('id').limit(1);dot.classList.toggle('online',!r.error);}catch(e){dot.classList.remove('online');}}
+
+// ══ CRYPTO ══
+function genSalt(n){n=n||16;var a=new Uint8Array(n);crypto.getRandomValues(a);return Array.from(a).map(function(b){return b.toString(16).padStart(2,'0');}).join('');}
+async function pbkdf2Hash(pw){
+  var salt=genSalt(16),saltBuf=new TextEncoder().encode(salt);
+  var km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),{name:'PBKDF2'},false,['deriveBits']);
+  var bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:saltBuf,iterations:PBKDF2_ITER,hash:'SHA-256'},km,256);
+  var hash=Array.from(new Uint8Array(bits)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  return{hash:hash,salt:salt};
+}
+async function pbkdf2Verify(pw,stored){
+  if(!stored)return false;var parts=stored.split(':');
+  if(parts.length===2){
+    var salt=parts[0],ref=parts[1],saltBuf=new TextEncoder().encode(salt);
+    var km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),{name:'PBKDF2'},false,['deriveBits']);
+    var bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:saltBuf,iterations:PBKDF2_ITER,hash:'SHA-256'},km,256);
+    var hash=Array.from(new Uint8Array(bits)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+    return safeEqual(hash,ref);
+  } else {
+    var data=new TextEncoder().encode(pw+'flash_salt_v1');
+    var buf=await crypto.subtle.digest('SHA-256',data);
+    var lh=Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+    return safeEqual(lh,stored);
+  }
+}
+function safeEqual(a,b){if(a.length!==b.length)return false;var r=0;for(var i=0;i<a.length;i++)r|=a.charCodeAt(i)^b.charCodeAt(i);return r===0;}
+
+})();
+</script>
+</body>
+</html>
